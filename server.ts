@@ -160,7 +160,6 @@ wss.on('connection', (ws) => {
             payload: { players: roomPlayersWithBalance, roomId: joinedRoom.id }
           });
 
-          // Chỉ khởi tạo GameInstance khi chưa có, để tránh làm gián đoạn phòng chờ
           if (!joinedRoom.game) {
              joinedRoom.game = new GameInstance(roomPlayersWithBalance, 10000);
              const history = globalHistory[joinedRoom.id] || [];
@@ -225,27 +224,52 @@ wss.on('connection', (ws) => {
             const error = room.game.playMove(clientId, message.payload.cardIds);
             
             if (!error) {
+              // Sau khi đánh bài, kiểm tra xem có sự kiện đặc biệt (Chặt heo/hàng) không
+              const currentMove = room.game.lastMove;
+              if (currentMove?.isChop || currentMove?.isOverChop) {
+                let chopType: any = "three_pairs";
+                if (currentMove.type === HandType.FOUR_OF_A_KIND) chopType = "four_of_a_kind";
+                else if (currentMove.type === HandType.FOUR_CONSECUTIVE_PAIRS) chopType = "four_pairs";
+
+                const player = room.playerInfos.find(p => p.id === clientId);
+                broadcast(room, {
+                  type: 'SPECIAL_EVENT',
+                  payload: { 
+                    type: currentMove.isOverChop ? 'chat_chong' : 'chat_heo', 
+                    playerName: player?.name || 'Ẩn danh',
+                    chopType: chopType
+                  }
+                });
+              }
+
               if (prevPhase === 'playing' && room.game.gamePhase === 'finished') {
                 updateGlobalStats(room);
                 const lastGame = room.game.history[0];
                 if (lastGame) {
                   lastGame.events.forEach(ev => {
                     let specialType = 'info';
-                    if (ev.type === 'CHOP') specialType = 'chat_heo';
-                    else if (ev.type === 'OVER_CHOP') specialType = 'chat_chong';
+                    let displayPlayerName = ev.playerName;
+
+                    if (ev.type === 'CHOP') {
+                      specialType = 'chat_heo';
+                      displayPlayerName = ev.targetName; // Hiển thị "X BỊ CHẶT HEO"
+                    }
+                    else if (ev.type === 'OVER_CHOP') {
+                      specialType = 'chat_chong';
+                      displayPlayerName = ev.targetName; // Hiển thị "X BỊ CHẶT CHỒNG"
+                    }
                     else if (ev.type === 'THOI') specialType = 'thui_heo';
                     else if (ev.type === 'CONG') specialType = 'chay_bai';
                     
                     broadcast(room, {
                       type: 'SPECIAL_EVENT',
-                      payload: { type: specialType, playerName: ev.playerName, chopType: 'three_pairs' }
+                      payload: { type: specialType, playerName: displayPlayerName, chopType: 'three_pairs' }
                     });
                   });
                 }
               }
               broadcastGameState(room);
             } else {
-              console.log(`Lượt đánh lỗi từ ${clientId}: ${error}`);
               ws.send(JSON.stringify({ type: 'ERROR', payload: error }));
             }
           }
@@ -317,8 +341,6 @@ wss.on('connection', (ws) => {
         payload: { players: roomPlayersWithBalance, roomId: room.id }
       });
       
-      // Không tự động xóa người chơi khỏi GameInstance khi đang đánh để tránh lệch lượt
-      // Chỉ cập nhật lại GameInstance nếu game chưa bắt đầu
       if (room.game && room.game.gamePhase !== 'playing') {
         room.game = new GameInstance(roomPlayersWithBalance, room.game.bet);
       }
