@@ -1,4 +1,3 @@
-
 import { Card, Player, Move, HandType, GameHistory, PlayerHistoryEntry, PayoutResult, GameEventRecord } from './types.js';
 import { detectHandType, compareHands, sortCards, checkInstantWin } from './ruleValidator.js';
 import { dealCards } from './deckManager.js';
@@ -32,6 +31,7 @@ export class GameInstance {
   private lastPayouts: PayoutResult[] = [];
   private roundEvents: GameEventRecord[] = [];
   private lastWasInstantWin: boolean = false;
+  private isFirstMoveOfGame: boolean = false; // Theo dõi nước đi đầu tiên của ván 1
   
   // Lưu vết chuỗi chặt trong vòng
   private chopChain: { attackerId: string, victimId: string, value: number }[] = [];
@@ -80,6 +80,7 @@ export class GameInstance {
     this.lastPayouts = [];
     this.chopChain = [];
     this.roundEvents = [];
+    this.isFirstMoveOfGame = this.isFirstGame; // Kích hoạt kiểm tra 3 Bích nếu là ván đầu
 
     this.players.forEach(p => {
       const handData = hands.find(h => h.playerId === p.id);
@@ -107,6 +108,7 @@ export class GameInstance {
   }
 
   private handleInstantWin(winnerId: string, reason: string) {
+    // Fixed: Pass an array of player IDs (string[]) instead of Player objects to calculateTrangMoney.
     const payouts = MoneyEngine.calculateTrangMoney(winnerId, this.players.map(p => p.id), this.bet);
     payouts.forEach(pay => {
       const p = this.players.find(pl => pl.id === pay.playerId);
@@ -134,18 +136,17 @@ export class GameInstance {
     const player = this.players.find(p => p.id === playerId);
     if (!player) return { error: "Người chơi không tồn tại" };
     
-    // Kiểm tra tính hợp lệ của bài trước khi so sánh
     const cards = player.hand.filter(c => cardIds.includes(c.id));
     if (cards.length !== cardIds.length) return { error: "Bài không hợp lệ" };
 
+    // 1. LUẬT 3 BÍCH CHO VÁN ĐẦU TIÊN
+    if (this.isFirstMoveOfGame) {
+      const hasThreeSpade = cards.some(c => c.rank === 3 && c.suit === 'spade');
+      if (!hasThreeSpade) return { error: "Ván đầu tiên bắt buộc phải đánh lá 3 Bích (3♠)!" };
+    }
+
     const handType = detectHandType(cards);
     if (handType === HandType.INVALID) return { error: "Bộ bài không hợp lệ" };
-
-    // Tự động xóa combo cũ nếu người chơi đó đã về
-    if (this.lastMove && this.finishedPlayers.includes(this.lastMove.playerId)) {
-      this.lastMove = null;
-      this.passedPlayers.clear();
-    }
 
     const isFourPairs = handType === HandType.FOUR_CONSECUTIVE_PAIRS;
     const isFreeChop = isFourPairs && this.lastMove && compareHands(cards, this.lastMove.cards) === 1;
@@ -165,7 +166,6 @@ export class GameInstance {
       const isVictimHeo = this.lastMove.cards.some(c => c.rank === 15);
       const isVictimHang = [HandType.THREE_CONSECUTIVE_PAIRS, HandType.FOUR_OF_A_KIND, HandType.FOUR_CONSECUTIVE_PAIRS].includes(this.lastMove.type);
 
-      // LOGIC CHẶT (Chặt Heo hoặc Chặt Chồng)
       if (isAttackerHang && (isVictimHeo || isVictimHang)) {
         let val = 0;
         if (isVictimHeo) {
@@ -181,19 +181,17 @@ export class GameInstance {
         
         const victimId = this.lastMove.playerId;
         this.chopChain.push({ attackerId: playerId, victimId: victimId, value: val });
-        
         const eventType = this.chopChain.length > 1 ? 'OVER_CHOP' : 'CHOP';
         const totalAmount = this.chopChain.reduce((sum, item) => sum + item.value, 0);
         
         this.resolveChopChain();
-        
         player.hand = player.hand.filter(c => !cardIds.includes(c.id));
         player.hasPlayedAnyCard = true;
         
-        // Sau khi chặt thành công: Clear combo cũ, người chặt được lead mới
         this.lastMove = null;
         this.passedPlayers.clear();
         this.currentTurn = this.players.findIndex(p => p.id === playerId);
+        this.isFirstMoveOfGame = false;
         
         if (player.hand.length === 0) this.handlePlayerFinish(player);
         
@@ -201,24 +199,15 @@ export class GameInstance {
         if (handType === HandType.FOUR_OF_A_KIND) visualChopType = "four_of_a_kind";
         else if (handType === HandType.FOUR_CONSECUTIVE_PAIRS) visualChopType = "four_pairs";
 
-        return { 
-          error: null, 
-          chopInfo: { 
-            attackerId: playerId, 
-            victimId: victimId, 
-            type: eventType, 
-            amount: totalAmount,
-            handType: visualChopType
-          } 
-        };
+        return { error: null, chopInfo: { attackerId: playerId, victimId: victimId, type: eventType, amount: totalAmount, handType: visualChopType } };
       }
     }
 
-    // Đánh bài bình thường
     player.hand = player.hand.filter(c => !cardIds.includes(c.id));
     player.hasPlayedAnyCard = true;
     this.lastMove = { type: handType, cards, playerId, timestamp: Date.now() };
     this.currentTurn = this.players.findIndex(p => p.id === playerId);
+    this.isFirstMoveOfGame = false;
 
     if (player.hand.length === 0) {
       this.handlePlayerFinish(player);
@@ -240,20 +229,7 @@ export class GameInstance {
       victim.balance -= total;
       winner.balance += total;
       const eventType = this.chopChain.length > 1 ? 'OVER_CHOP' : 'CHOP';
-      const victimName = victim.name;
-      const winnerName = winner.name;
-      
-      this.roundEvents.push({ 
-        type: eventType, 
-        fromPlayerId: victim.id, 
-        toPlayerId: winner.id, 
-        playerName: winnerName, 
-        targetName: victimName, 
-        amount: total, 
-        description: `${winnerName} chặt ${victimName} thu ${total.toLocaleString()}$`, 
-        timestamp: Date.now() 
-      });
-      
+      this.roundEvents.push({ type: eventType, fromPlayerId: victim.id, toPlayerId: winner.id, playerName: winner.name, targetName: victim.name, amount: total, description: `${winner.name} chặt ${victim.name} thu ${total.toLocaleString()}$`, timestamp: Date.now() });
       this.lastPayouts.push({ playerId: winner.id, change: total, reason: eventType === 'CHOP' ? "Thắng chặt" : "Thắng chặt chồng" });
       this.lastPayouts.push({ playerId: victim.id, change: -total, reason: eventType === 'CHOP' ? "Bị chặt" : "Bị chặt chồng" });
     }
@@ -272,13 +248,12 @@ export class GameInstance {
     let nextIdx = (this.currentTurn + 1) % playerCount;
     let attempts = 0;
 
-    // Tìm người chơi kế tiếp hợp lệ (không phải người đã về và không phải người đã bỏ lượt)
     while (attempts < playerCount) {
       const p = this.players[nextIdx];
       const isFinished = this.finishedPlayers.includes(p.id);
       const hasPassed = this.passedPlayers.has(p.id);
 
-      // Nếu đã quay lại chủ combo cũ: kết thúc trick, người này được lead mới
+      // Nếu quay lại đúng người đang làm chủ combo -> Trick kết thúc, reset vòng
       if (this.lastMove && p.id === this.lastMove.playerId) {
         this.resetRound(p.id);
         return;
@@ -292,18 +267,10 @@ export class GameInstance {
       attempts++;
     }
 
-    // Trường hợp tất cả những người còn lại đều bỏ lượt hoặc đã về
+    // Nếu không tìm được ai khác (tất cả đã bỏ lượt hoặc đã về), người chủ combo (dù đã về) vẫn thắng trick
     const ownerId = this.lastMove?.playerId;
     if (ownerId) {
-      // Nếu chủ combo đã về, tìm người ACTIVE gần nhất để trao quyền lead
-      let finderIdx = (this.players.findIndex(p => p.id === ownerId) + 1) % playerCount;
-      for (let i = 0; i < playerCount; i++) {
-        if (!this.finishedPlayers.includes(this.players[finderIdx].id)) {
-          this.resetRound(this.players[finderIdx].id);
-          return;
-        }
-        finderIdx = (finderIdx + 1) % playerCount;
-      }
+      this.resetRound(ownerId);
     }
   }
 
@@ -311,8 +278,20 @@ export class GameInstance {
     this.resolveChopChain();
     this.lastMove = null;
     this.passedPlayers.clear();
-    const idx = this.players.findIndex(p => p.id === leadPlayerId);
-    this.currentTurn = idx !== -1 ? idx : 0;
+    
+    // Tìm người tiếp theo sau leadPlayerId để trao quyền lead nếu leadPlayerId đã FINISHED
+    let idx = this.players.findIndex(p => p.id === leadPlayerId);
+    if (this.finishedPlayers.includes(leadPlayerId)) {
+      const playerCount = this.players.length;
+      for (let i = 1; i < playerCount; i++) {
+        const next = (idx + i) % playerCount;
+        if (!this.finishedPlayers.includes(this.players[next].id)) {
+          idx = next;
+          break;
+        }
+      }
+    }
+    this.currentTurn = idx;
   }
 
   private handlePlayerFinish(player: Player) {
@@ -320,11 +299,8 @@ export class GameInstance {
     this.finishedPlayers.push(player.id);
     player.finishedRank = this.finishedPlayers.length;
 
-    // XỬ LÝ QUAN TRỌNG: Nếu người vừa về là chủ combo hiện tại, xóa combo ngay lập tức
-    if (this.lastMove && this.lastMove.playerId === player.id) {
-      this.lastMove = null;
-      this.passedPlayers.clear();
-    }
+    // KHÔNG resetRound ngay khi người chơi về Nhất. 
+    // Trick vẫn tiếp tục cho đến khi mọi người còn lại bỏ lượt.
 
     if (player.finishedRank === 1) {
       this.players.forEach(p => {
@@ -337,7 +313,6 @@ export class GameInstance {
 
     const remainingCount = this.players.filter(p => !this.finishedPlayers.includes(p.id)).length;
     if (remainingCount <= 1) {
-      // Tự động gán rank cho những người còn lại
       this.players.forEach(p => { 
         if(!this.finishedPlayers.includes(p.id)) { 
           this.finishedPlayers.push(p.id); 
@@ -359,25 +334,16 @@ export class GameInstance {
     this.startingPlayerId = this.finishedPlayers[0];
 
     const settlements = MoneyEngine.settleGame(this.players, this.bet);
-
     settlements.forEach(pay => {
       const p = this.players.find(pl => pl.id === pay.playerId);
       if (p) {
         p.balance += pay.change;
         this.lastPayouts.push(pay);
-        
         if (pay.change < 0 && pay.reason?.toLowerCase().includes("thối")) {
-          this.roundEvents.push({
-            type: 'THOI',
-            playerName: p.name,
-            description: `${p.name}: ${pay.reason}`,
-            timestamp: Date.now(),
-            fromPlayerId: p.id
-          });
+          this.roundEvents.push({ type: 'THOI', playerName: p.name, description: `${p.name}: ${pay.reason}`, timestamp: Date.now(), fromPlayerId: p.id });
         }
       }
     });
-
     this.recordHistory();
   }
 
@@ -402,7 +368,8 @@ export class GameInstance {
       gamePhase: this.gamePhase,
       bet: this.bet,
       passedPlayers: Array.from(this.passedPlayers),
-      history: this.history
+      history: this.history,
+      isFirstGame: this.isFirstGame
     };
   }
 }

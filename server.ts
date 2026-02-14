@@ -13,7 +13,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-// Fixed: Replaced undefined port_placeholder with a default port 3000
 const port = process.env.PORT || 3000;
 const roomManager = new RoomManager();
 
@@ -161,8 +160,11 @@ wss.on('connection', (ws) => {
             payload: { players: roomPlayersWithBalance, roomId: joinedRoom.id }
           });
 
-          if (!joinedRoom.game) {
-             joinedRoom.game = new GameInstance(roomPlayersWithBalance, 10000);
+          // LUẬT RESET KHI CÓ NGƯỜI MỚI: Nếu game chưa bắt đầu, reset về isFirstGame = true để xét 3 Bích
+          if (!joinedRoom.game || joinedRoom.game.gamePhase !== 'playing') {
+             const currentBet = joinedRoom.game ? joinedRoom.game.bet : 10000;
+             joinedRoom.game = new GameInstance(roomPlayersWithBalance, currentBet);
+             joinedRoom.game.isFirstGame = true; // Reset luật 3 Bích cho nhóm mới
              const history = globalHistory[joinedRoom.id] || [];
              if (typeof joinedRoom.game.setHistory === 'function') {
                 joinedRoom.game.setHistory(history);
@@ -191,18 +193,15 @@ wss.on('connection', (ws) => {
               const prevInternal = room.game ? room.game.getInternalState() : null;
               
               const newGame = new GameInstance(playersData, currentBet);
-              
               if (typeof newGame.setHistory === 'function') {
                 newGame.setHistory(prevHistory);
               }
-              
               if (prevInternal && typeof newGame.setPersistentState === 'function') {
                 newGame.setPersistentState(prevInternal);
               }
 
               room.game = newGame;
               room.game.startNewRound();
-              
               if (room.game.gamePhase === 'finished') updateGlobalStats(room);
               broadcastGameState(room);
             } catch (err: any) {
@@ -225,7 +224,6 @@ wss.on('connection', (ws) => {
             const result = room.game.playMove(clientId, message.payload.cardIds);
             
             if (!result.error) {
-              // Xử lý thông báo chặt heo/chặt chồng ngay lập tức
               if (result.chopInfo) {
                 const victim = room.playerInfos.find(p => p.id === result.chopInfo.victimId);
                 broadcast(room, {
@@ -238,7 +236,6 @@ wss.on('connection', (ws) => {
                 });
               }
 
-              // Xử lý kết thúc ván đấu
               if (prevPhase === 'playing' && room.game.gamePhase === 'finished') {
                 updateGlobalStats(room);
                 const lastGame = room.game.history[0];
@@ -246,24 +243,16 @@ wss.on('connection', (ws) => {
                   lastGame.events.forEach(ev => {
                     let specialType: any = 'info';
                     let displayPlayerName = ev.playerName;
-
                     if (ev.type === 'THOI') {
-                      // Xác định loại thối dựa trên description để hiển thị đúng hiệu ứng
                       if (ev.description.toLowerCase().includes("tứ quý")) specialType = 'thui_tu_quy';
                       else if (ev.description.toLowerCase().includes("3 đôi thông")) specialType = 'thui_3_doi_thong';
                       else specialType = 'thui_heo';
-                      
-                      displayPlayerName = ev.playerName;
-                    }
-                    else if (ev.type === 'CONG') {
+                    } else if (ev.type === 'CONG') {
                       specialType = 'chay_bai';
-                      displayPlayerName = ev.playerName;
-                    }
-                    else if (ev.type === 'INSTANT_WIN') {
+                    } else if (ev.type === 'INSTANT_WIN') {
                       specialType = 'info';
                       displayPlayerName = `ĂN TRẮNG: ${ev.playerName}`;
                     }
-                    
                     if (specialType !== 'info' || ev.type === 'INSTANT_WIN') {
                       broadcast(room, {
                         type: 'SPECIAL_EVENT',
@@ -345,11 +334,10 @@ wss.on('connection', (ws) => {
         type: 'ROOM_UPDATE',
         payload: { players: roomPlayersWithBalance, roomId: room.id }
       });
-      
       if (room.game && room.game.gamePhase !== 'playing') {
         room.game = new GameInstance(roomPlayersWithBalance, room.game.bet);
+        room.game.isFirstGame = true; // Reset luật 3 bích khi có người thoát/thay đổi phòng
       }
-      
       broadcastGameState(room);
     }
   });
