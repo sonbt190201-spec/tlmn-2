@@ -662,11 +662,12 @@ const App: React.FC = () => {
                {me?.hand?.map((c: any, idx: number) => {
                  const handSize = me?.hand?.length || 0;
                  const isMobile = window.innerWidth < 768;
-                 // Động hóa độ chồng lấn: Càng nhiều bài thì -maxOverlap, càng ít bài thì giãn ra
-                 const maxOverlap = isMobile ? 42 : 70; 
-                 const overlap = handSize > 1 ? (handSize > 8 ? maxOverlap : maxOverlap * 0.6) : 0;
+                 // Điều chỉnh z-index tăng dần để lá bên phải luôn nằm trên lá bên trái
+                 // Khi đó, mép trái (chứa rank/suit) của các lá bài sẽ luôn lộ ra ngoài
+                 const maxOverlap = isMobile ? 40 : 65;
+                 const overlap = handSize > 1 ? maxOverlap : 0;
                  const style: React.CSSProperties = { 
-                   zIndex: idx, // z-index tăng dần để lá bên phải đè lên lá bên trái
+                   zIndex: idx,
                    marginLeft: idx > 0 ? `-${overlap}px` : '0px',
                    position: 'relative'
                  };
