@@ -18,7 +18,7 @@ const playChopSoundSynth = (type: ChopType) => {
   if (ctx.state === 'suspended') ctx.resume();
   
   const master = ctx.createGain();
-  master.gain.value = 1.0;
+  master.gain.value = 1.5; // TĂNG TỪ 1.0 LÊN 1.5
   master.connect(ctx.destination);
   const now = ctx.currentTime;
 
@@ -33,7 +33,7 @@ const playChopSoundSynth = (type: ChopType) => {
   noiseFilter.Q.value = 10;
   const noiseGain = ctx.createGain();
   noiseGain.gain.setValueAtTime(0, now);
-  noiseGain.gain.linearRampToValueAtTime(0.3, now + 0.1);
+  noiseGain.gain.linearRampToValueAtTime(0.4, now + 0.1);
   noiseGain.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
   noiseFilter.frequency.setValueAtTime(200, now);
   noiseFilter.frequency.exponentialRampToValueAtTime(2000, now + 0.2);
@@ -48,7 +48,7 @@ const playChopSoundSynth = (type: ChopType) => {
   osc.frequency.setValueAtTime(150, now + 0.1);
   osc.frequency.exponentialRampToValueAtTime(40, now + 0.3);
   oscGain.gain.setValueAtTime(0, now + 0.1);
-  oscGain.gain.linearRampToValueAtTime(1, now + 0.12);
+  oscGain.gain.linearRampToValueAtTime(1.2, now + 0.12);
   oscGain.gain.exponentialRampToValueAtTime(0.01, now + 0.6);
   osc.connect(oscGain);
   oscGain.connect(master);
@@ -60,7 +60,7 @@ const playChopSoundSynth = (type: ChopType) => {
   sub.type = 'sine';
   sub.frequency.setValueAtTime(50, now + 0.12);
   subGain.gain.setValueAtTime(0, now + 0.12);
-  subGain.gain.linearRampToValueAtTime(0.8, now + 0.15);
+  subGain.gain.linearRampToValueAtTime(1.0, now + 0.15);
   subGain.gain.exponentialRampToValueAtTime(0.01, now + (type === 'three_pairs' ? 0.8 : 1.5));
   sub.connect(subGain);
   subGain.connect(master);
@@ -73,7 +73,7 @@ const playChopSoundSynth = (type: ChopType) => {
     metal.type = 'square';
     metal.frequency.setValueAtTime(1200, now + 0.11);
     metalGain.gain.setValueAtTime(0, now + 0.11);
-    metalGain.gain.linearRampToValueAtTime(0.2, now + 0.12);
+    metalGain.gain.linearRampToValueAtTime(0.3, now + 0.12);
     metalGain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
     metal.connect(metalGain);
     metalGain.connect(master);
