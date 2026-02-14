@@ -662,12 +662,12 @@ const App: React.FC = () => {
                {me?.hand?.map((c: any, idx: number) => {
                  const handSize = me?.hand?.length || 0;
                  const isMobile = window.innerWidth < 768;
-                 // Điều chỉnh z-index tăng dần để lá bên phải luôn nằm trên lá bên trái
-                 // Khi đó, mép trái (chứa rank/suit) của các lá bài sẽ luôn lộ ra ngoài
-                 const maxOverlap = isMobile ? 40 : 65;
-                 const overlap = handSize > 1 ? maxOverlap : 0;
+                 // Tinh chỉnh zIndex: Lá bên phải (idx lớn) nằm trên lá bên trái (idx nhỏ)
+                 // Tinh chỉnh overlap: Chỉ overlap nhiều khi bài nhiều (> 6 lá)
+                 const maxOverlap = isMobile ? 45 : 75;
+                 const overlap = handSize > 1 ? (handSize > 6 ? maxOverlap : maxOverlap * 0.4) : 0;
                  const style: React.CSSProperties = { 
-                   zIndex: idx,
+                   zIndex: idx, 
                    marginLeft: idx > 0 ? `-${overlap}px` : '0px',
                    position: 'relative'
                  };
