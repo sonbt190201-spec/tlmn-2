@@ -13,6 +13,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+// Fixed: Replaced undefined port_placeholder with a default port 3000
 const port = process.env.PORT || 3000;
 const roomManager = new RoomManager();
 
@@ -221,56 +222,60 @@ wss.on('connection', (ws) => {
         case 'PLAY_CARDS':
           if (room?.game) {
             const prevPhase = room.game.gamePhase;
-            const error = room.game.playMove(clientId, message.payload.cardIds);
+            const result = room.game.playMove(clientId, message.payload.cardIds);
             
-            if (!error) {
-              // Sau khi đánh bài, kiểm tra xem có sự kiện đặc biệt (Chặt heo/hàng) không
-              const currentMove = room.game.lastMove;
-              if (currentMove?.isChop || currentMove?.isOverChop) {
-                let chopType: any = "three_pairs";
-                if (currentMove.type === HandType.FOUR_OF_A_KIND) chopType = "four_of_a_kind";
-                else if (currentMove.type === HandType.FOUR_CONSECUTIVE_PAIRS) chopType = "four_pairs";
-
-                const player = room.playerInfos.find(p => p.id === clientId);
+            if (!result.error) {
+              // Xử lý thông báo chặt heo/chặt chồng ngay lập tức
+              if (result.chopInfo) {
+                const victim = room.playerInfos.find(p => p.id === result.chopInfo.victimId);
                 broadcast(room, {
                   type: 'SPECIAL_EVENT',
                   payload: { 
-                    type: currentMove.isOverChop ? 'chat_chong' : 'chat_heo', 
-                    playerName: player?.name || 'Ẩn danh',
-                    chopType: chopType
+                    type: result.chopInfo.type === 'CHOP' ? 'chat_heo' : 'chat_chong', 
+                    playerName: victim?.name || 'Ẩn danh',
+                    chopType: result.chopInfo.handType
                   }
                 });
               }
 
+              // Xử lý kết thúc ván đấu
               if (prevPhase === 'playing' && room.game.gamePhase === 'finished') {
                 updateGlobalStats(room);
                 const lastGame = room.game.history[0];
                 if (lastGame) {
                   lastGame.events.forEach(ev => {
-                    let specialType = 'info';
+                    let specialType: any = 'info';
                     let displayPlayerName = ev.playerName;
 
-                    if (ev.type === 'CHOP') {
-                      specialType = 'chat_heo';
-                      displayPlayerName = ev.targetName; // Hiển thị "X BỊ CHẶT HEO"
+                    if (ev.type === 'THOI') {
+                      // Xác định loại thối dựa trên description để hiển thị đúng hiệu ứng
+                      if (ev.description.toLowerCase().includes("tứ quý")) specialType = 'thui_tu_quy';
+                      else if (ev.description.toLowerCase().includes("3 đôi thông")) specialType = 'thui_3_doi_thong';
+                      else specialType = 'thui_heo';
+                      
+                      displayPlayerName = ev.playerName;
                     }
-                    else if (ev.type === 'OVER_CHOP') {
-                      specialType = 'chat_chong';
-                      displayPlayerName = ev.targetName; // Hiển thị "X BỊ CHẶT CHỒNG"
+                    else if (ev.type === 'CONG') {
+                      specialType = 'chay_bai';
+                      displayPlayerName = ev.playerName;
                     }
-                    else if (ev.type === 'THOI') specialType = 'thui_heo';
-                    else if (ev.type === 'CONG') specialType = 'chay_bai';
+                    else if (ev.type === 'INSTANT_WIN') {
+                      specialType = 'info';
+                      displayPlayerName = `ĂN TRẮNG: ${ev.playerName}`;
+                    }
                     
-                    broadcast(room, {
-                      type: 'SPECIAL_EVENT',
-                      payload: { type: specialType, playerName: displayPlayerName, chopType: 'three_pairs' }
-                    });
+                    if (specialType !== 'info' || ev.type === 'INSTANT_WIN') {
+                      broadcast(room, {
+                        type: 'SPECIAL_EVENT',
+                        payload: { type: specialType, playerName: displayPlayerName, chopType: 'three_pairs' }
+                      });
+                    }
                   });
                 }
               }
               broadcastGameState(room);
             } else {
-              ws.send(JSON.stringify({ type: 'ERROR', payload: error }));
+              ws.send(JSON.stringify({ type: 'ERROR', payload: result.error }));
             }
           }
           break;

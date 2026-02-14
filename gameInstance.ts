@@ -6,6 +6,17 @@ import { MoneyEngine } from './moneyEngine.js';
 
 export type GamePhase = "waiting" | "playing" | "finished";
 
+export interface PlayMoveResult {
+  error: string | null;
+  chopInfo?: {
+    attackerId: string;
+    victimId: string;
+    type: 'CHOP' | 'OVER_CHOP';
+    amount: number;
+    handType: string;
+  };
+}
+
 export class GameInstance {
   players: Player[];
   bet: number;
@@ -118,35 +129,36 @@ export class GameInstance {
     this.recordHistory();
   }
 
-  playMove(playerId: string, cardIds: string[]): string | null {
-    if (this.gamePhase !== "playing") return "Ván bài đã kết thúc";
+  playMove(playerId: string, cardIds: string[]): PlayMoveResult {
+    if (this.gamePhase !== "playing") return { error: "Ván bài đã kết thúc" };
     const player = this.players.find(p => p.id === playerId);
-    if (!player) return "Người chơi không tồn tại";
+    if (!player) return { error: "Người chơi không tồn tại" };
     
     const cards = player.hand.filter(c => cardIds.includes(c.id));
-    if (cards.length !== cardIds.length) return "Bài không hợp lệ";
+    if (cards.length !== cardIds.length) return { error: "Bài không hợp lệ" };
 
     const handType = detectHandType(cards);
-    if (handType === HandType.INVALID) return "Bộ bài không hợp lệ";
+    if (handType === HandType.INVALID) return { error: "Bộ bài không hợp lệ" };
 
     const isFourPairs = handType === HandType.FOUR_CONSECUTIVE_PAIRS;
     const isFreeChop = isFourPairs && this.lastMove && compareHands(cards, this.lastMove.cards) === 1;
 
     if (this.players[this.currentTurn].id !== playerId && !isFreeChop) {
-      return "Chưa tới lượt";
+      return { error: "Chưa tới lượt" };
     }
 
     if (this.passedPlayers.has(playerId) && !isFreeChop) {
-      return "Bạn đã bỏ lượt của vòng này";
+      return { error: "Bạn đã bỏ lượt của vòng này" };
     }
 
     if (this.lastMove) {
-      if (compareHands(cards, this.lastMove.cards) !== 1) return "Bộ bài không đủ mạnh";
+      if (compareHands(cards, this.lastMove.cards) !== 1) return { error: "Bộ bài không đủ mạnh" };
       
       const isAttackerHang = [HandType.THREE_CONSECUTIVE_PAIRS, HandType.FOUR_OF_A_KIND, HandType.FOUR_CONSECUTIVE_PAIRS].includes(handType);
       const isVictimHeo = this.lastMove.cards.some(c => c.rank === 15);
       const isVictimHang = [HandType.THREE_CONSECUTIVE_PAIRS, HandType.FOUR_OF_A_KIND, HandType.FOUR_CONSECUTIVE_PAIRS].includes(this.lastMove.type);
 
+      // LOGIC CHẶT (Chặt Heo hoặc Chặt Chồng)
       if (isAttackerHang && (isVictimHeo || isVictimHang)) {
         let val = 0;
         if (isVictimHeo) {
@@ -159,20 +171,43 @@ export class GameInstance {
           else if (vType === HandType.FOUR_OF_A_KIND) val = this.bet * 4; 
           else if (vType === HandType.FOUR_CONSECUTIVE_PAIRS) val = this.bet * 4;
         }
-        this.chopChain.push({ attackerId: playerId, victimId: this.lastMove.playerId, value: val });
+        
+        const victimId = this.lastMove.playerId;
+        this.chopChain.push({ attackerId: playerId, victimId: victimId, value: val });
+        
+        const eventType = this.chopChain.length > 1 ? 'OVER_CHOP' : 'CHOP';
+        const totalAmount = this.chopChain.reduce((sum, item) => sum + item.value, 0);
         
         this.resolveChopChain();
+        
         player.hand = player.hand.filter(c => !cardIds.includes(c.id));
         player.hasPlayedAnyCard = true;
+        
+        // Theo yêu cầu: Sau khi chặt thành công, reset vòng (clear bàn) và A được lead mới
         this.lastMove = null;
         this.passedPlayers.clear();
         this.currentTurn = this.players.findIndex(p => p.id === playerId);
         
         if (player.hand.length === 0) this.handlePlayerFinish(player);
-        return null;
+        
+        let visualChopType: any = "three_pairs";
+        if (handType === HandType.FOUR_OF_A_KIND) visualChopType = "four_of_a_kind";
+        else if (handType === HandType.FOUR_CONSECUTIVE_PAIRS) visualChopType = "four_pairs";
+
+        return { 
+          error: null, 
+          chopInfo: { 
+            attackerId: playerId, 
+            victimId: victimId, 
+            type: eventType, 
+            amount: totalAmount,
+            handType: visualChopType
+          } 
+        };
       }
     }
 
+    // Đánh bài bình thường
     player.hand = player.hand.filter(c => !cardIds.includes(c.id));
     player.hasPlayedAnyCard = true;
     this.lastMove = { type: handType, cards, playerId, timestamp: Date.now() };
@@ -184,7 +219,7 @@ export class GameInstance {
       this.moveToNextPlayer();
     }
 
-    return null;
+    return { error: null };
   }
 
   private resolveChopChain() {
@@ -198,7 +233,20 @@ export class GameInstance {
       victim.balance -= total;
       winner.balance += total;
       const eventType = this.chopChain.length > 1 ? 'OVER_CHOP' : 'CHOP';
-      this.roundEvents.push({ type: eventType, fromPlayerId: victim.id, toPlayerId: winner.id, playerName: winner.name, targetName: victim.name, amount: total, description: `${winner.name} chặt ${victim.name} thu ${total}$`, timestamp: Date.now() });
+      const victimName = victim.name;
+      const winnerName = winner.name;
+      
+      this.roundEvents.push({ 
+        type: eventType, 
+        fromPlayerId: victim.id, 
+        toPlayerId: winner.id, 
+        playerName: winnerName, 
+        targetName: victimName, 
+        amount: total, 
+        description: `${winnerName} chặt ${victimName} thu ${total.toLocaleString()}$`, 
+        timestamp: Date.now() 
+      });
+      
       this.lastPayouts.push({ playerId: winner.id, change: total, reason: eventType === 'CHOP' ? "Thắng chặt" : "Thắng chặt chồng" });
       this.lastPayouts.push({ playerId: victim.id, change: -total, reason: eventType === 'CHOP' ? "Bị chặt" : "Bị chặt chồng" });
     }
@@ -301,13 +349,15 @@ export class GameInstance {
         p.balance += pay.change;
         this.lastPayouts.push(pay);
         
-        // Ghi lại event thông báo nếu có thối bài
-        if (pay.reason?.toLowerCase().includes("thối")) {
+        // FIX: Chỉ kích hoạt sự kiện thối cho người BỊ TRỪ TIỀN (người sở hữu heo/hàng thối)
+        // Điều này ngăn chặn việc người nhận tiền thối cũng hiển thị hiệu ứng "bị thối".
+        if (pay.change < 0 && pay.reason?.toLowerCase().includes("thối")) {
           this.roundEvents.push({
             type: 'THOI',
             playerName: p.name,
             description: `${p.name}: ${pay.reason}`,
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            fromPlayerId: p.id
           });
         }
       }
