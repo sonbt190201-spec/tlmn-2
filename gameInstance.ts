@@ -44,7 +44,6 @@ export class GameInstance {
     this.startingPlayerId = null;
   }
 
-  // Khôi phục lịch sử từ file (nếu có)
   setHistory(history: GameHistory[]) {
     if (Array.isArray(history)) {
       this.history = history;
@@ -155,9 +154,13 @@ export class GameInstance {
     const player = this.players.find(p => p.id === playerId);
     if (!player) return "Người chơi không tồn tại";
     
+    // Tìm các lá bài trong tay người chơi dựa trên ID client gửi lên
     const cards = player.hand.filter(c => cardIds.includes(c.id));
+    if (cards.length === 0 || cards.length !== cardIds.length) return "Lá bài không hợp lệ trong tay";
+
     const handType = detectHandType(cards);
     
+    // Kiểm tra chặn tự do (4 đôi thông)
     const isFreeChop = (handType === HandType.FOUR_CONSECUTIVE_PAIRS);
 
     if (this.players[this.currentTurn].id !== playerId && !isFreeChop) {
@@ -170,6 +173,7 @@ export class GameInstance {
 
     if (handType === HandType.INVALID) return "Bộ bài không hợp lệ";
 
+    // Kiểm tra ván đầu phải đánh 3 bích
     if (this.mustContainStarter && this.lastMove === null) {
       const containsLowest = cards.some(c => c.id === this.lowestCardIdInFirstGame);
       if (!containsLowest && (this.isFirstGame || this.lastWasInstantWin)) {
@@ -181,7 +185,7 @@ export class GameInstance {
     let isOverChop = false;
 
     if (this.lastMove) {
-      if (compareHands(cards, this.lastMove.cards) !== 1) return "Không thể chặn";
+      if (compareHands(cards, this.lastMove.cards) !== 1) return "Không thể chặn bộ bài này";
       
       const lastType = this.lastMove.type;
       const isVictimHeo = this.lastMove.cards.some(c => c.rank === 15);
@@ -202,6 +206,7 @@ export class GameInstance {
       }
     }
 
+    // Thực hiện đánh bài
     player.hand = player.hand.filter(c => !cardIds.includes(c.id));
     player.hasPlayedAnyCard = true;
     this.lastMove = { type: handType, cards, playerId, timestamp: Date.now(), isChop, isOverChop };

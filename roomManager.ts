@@ -21,7 +21,7 @@ export class RoomManager {
 
     if (!room) {
       for (const r of this.rooms.values()) {
-        if (r.playerInfos.length < 10) {
+        if (r.playerInfos.length < 4) { // Giới hạn 4 người chơi theo luật Tiến Lên
           room = r;
           break;
         }
@@ -40,7 +40,15 @@ export class RoomManager {
     }
 
     room.clients.set(clientId, ws);
-    room.playerInfos.push({ id: clientId, name: clientName });
+    
+    // Ngăn chặn trùng lặp ID người chơi trong cùng một phòng
+    const existingPlayerIdx = room.playerInfos.findIndex(p => p.id === clientId);
+    if (existingPlayerIdx !== -1) {
+      room.playerInfos[existingPlayerIdx].name = clientName;
+    } else {
+      room.playerInfos.push({ id: clientId, name: clientName });
+    }
+    
     return room;
   }
 

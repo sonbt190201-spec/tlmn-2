@@ -464,7 +464,8 @@ const App: React.FC = () => {
         setSpecialEventQueue(prev => [...prev, { ...data.payload, id: Math.random().toString(36).substr(2, 9) }]);
       }
       else if (data.type === 'ERROR') {
-        setSpecialEventQueue(prev => [...prev, { id: 'err-'+Date.now(), type: 'info', playerName: data.payload }]);
+        // Cải thiện thông báo lỗi đánh bài
+        setSpecialEventQueue(prev => [...prev, { id: 'err-'+Date.now(), type: 'info', playerName: 'LỖI: ' + data.payload.toUpperCase() }]);
       }
     };
     setWs(socket);
@@ -484,20 +485,24 @@ const App: React.FC = () => {
     await unlockAudio();
     playSfx('play');
     ws?.send(JSON.stringify({ type: 'PLAY_CARDS', payload: { cardIds: selectedCards } }));
-    setSelectedCards([]);
+    // Không reset ngay để nếu server báo lỗi người chơi vẫn thấy bài đang chọn
+    // setSelectedCards([]);
   };
 
+  // Reset bài chọn khi gameState thay đổi (đã đánh thành công)
+  useEffect(() => {
+    if (gameState?.lastMove?.playerId === myId) {
+      setSelectedCards([]);
+    }
+  }, [gameState?.lastMove, myId]);
+
   const orderedPlayers = useMemo(() => {
-    // SỬA LỖI: Ưu tiên roomInfo nếu gameState rỗng hoặc chưa có người chơi
     const playersInGame = gameState?.players || [];
     const playersInRoom = roomInfo?.players || [];
     
     let basePlayers = (playersInGame.length > 0) ? playersInGame : playersInRoom;
-    
-    // Nếu cả 2 đều rỗng, trả về mảng rỗng
     if (basePlayers.length === 0) return [];
     
-    // Tìm vị trí của "tôi" để sắp xếp xoay vòng bàn chơi
     const myIndex = basePlayers.findIndex((p: any) => p.id === myId);
     if (myIndex === -1) return basePlayers;
     return [...basePlayers.slice(myIndex), ...basePlayers.slice(0, myIndex)];

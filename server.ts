@@ -16,7 +16,6 @@ const app = express();
 const port = process.env.PORT || 3000;
 const roomManager = new RoomManager();
 
-// Tệp lưu trữ bền vững
 const DATA_DIR = path.join(__dirname, 'data');
 const BALANCES_FILE = path.join(DATA_DIR, 'balances.json');
 const HISTORY_FILE = path.join(DATA_DIR, 'history.json');
@@ -161,9 +160,9 @@ wss.on('connection', (ws) => {
             payload: { players: roomPlayersWithBalance, roomId: joinedRoom.id }
           });
 
-          // Khởi tạo GameInstance nếu chưa có hoặc game đã kết thúc
-          if (!joinedRoom.game || joinedRoom.game.gamePhase !== 'playing') {
-             joinedRoom.game = new GameInstance(roomPlayersWithBalance, joinedRoom.game?.bet || 10000);
+          // Chỉ khởi tạo GameInstance khi chưa có, để tránh làm gián đoạn phòng chờ
+          if (!joinedRoom.game) {
+             joinedRoom.game = new GameInstance(roomPlayersWithBalance, 10000);
              const history = globalHistory[joinedRoom.id] || [];
              if (typeof joinedRoom.game.setHistory === 'function') {
                 joinedRoom.game.setHistory(history);
@@ -246,6 +245,7 @@ wss.on('connection', (ws) => {
               }
               broadcastGameState(room);
             } else {
+              console.log(`Lượt đánh lỗi từ ${clientId}: ${error}`);
               ws.send(JSON.stringify({ type: 'ERROR', payload: error }));
             }
           }
@@ -308,7 +308,6 @@ wss.on('connection', (ws) => {
   ws.on('close', () => {
     const room = roomManager.leaveRoom(clientId);
     if (room) {
-      if (room.game) room.game.removePlayer(clientId);
       const roomPlayersWithBalance = room.playerInfos.map(p => ({
         ...p,
         balance: persistentPlayers[p.id]?.balance || 1000000
@@ -318,6 +317,8 @@ wss.on('connection', (ws) => {
         payload: { players: roomPlayersWithBalance, roomId: room.id }
       });
       
+      // Không tự động xóa người chơi khỏi GameInstance khi đang đánh để tránh lệch lượt
+      // Chỉ cập nhật lại GameInstance nếu game chưa bắt đầu
       if (room.game && room.game.gamePhase !== 'playing') {
         room.game = new GameInstance(roomPlayersWithBalance, room.game.bet);
       }
