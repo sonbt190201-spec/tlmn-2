@@ -134,11 +134,18 @@ export class GameInstance {
     const player = this.players.find(p => p.id === playerId);
     if (!player) return { error: "Người chơi không tồn tại" };
     
+    // Kiểm tra tính hợp lệ của bài trước khi so sánh
     const cards = player.hand.filter(c => cardIds.includes(c.id));
     if (cards.length !== cardIds.length) return { error: "Bài không hợp lệ" };
 
     const handType = detectHandType(cards);
     if (handType === HandType.INVALID) return { error: "Bộ bài không hợp lệ" };
+
+    // Tự động xóa combo cũ nếu người chơi đó đã về
+    if (this.lastMove && this.finishedPlayers.includes(this.lastMove.playerId)) {
+      this.lastMove = null;
+      this.passedPlayers.clear();
+    }
 
     const isFourPairs = handType === HandType.FOUR_CONSECUTIVE_PAIRS;
     const isFreeChop = isFourPairs && this.lastMove && compareHands(cards, this.lastMove.cards) === 1;
@@ -183,7 +190,7 @@ export class GameInstance {
         player.hand = player.hand.filter(c => !cardIds.includes(c.id));
         player.hasPlayedAnyCard = true;
         
-        // Theo yêu cầu: Sau khi chặt thành công, reset vòng (clear bàn) và A được lead mới
+        // Sau khi chặt thành công: Clear combo cũ, người chặt được lead mới
         this.lastMove = null;
         this.passedPlayers.clear();
         this.currentTurn = this.players.findIndex(p => p.id === playerId);
@@ -265,11 +272,13 @@ export class GameInstance {
     let nextIdx = (this.currentTurn + 1) % playerCount;
     let attempts = 0;
 
+    // Tìm người chơi kế tiếp hợp lệ (không phải người đã về và không phải người đã bỏ lượt)
     while (attempts < playerCount) {
       const p = this.players[nextIdx];
       const isFinished = this.finishedPlayers.includes(p.id);
       const hasPassed = this.passedPlayers.has(p.id);
 
+      // Nếu đã quay lại chủ combo cũ: kết thúc trick, người này được lead mới
       if (this.lastMove && p.id === this.lastMove.playerId) {
         this.resetRound(p.id);
         return;
@@ -283,8 +292,10 @@ export class GameInstance {
       attempts++;
     }
 
+    // Trường hợp tất cả những người còn lại đều bỏ lượt hoặc đã về
     const ownerId = this.lastMove?.playerId;
-    if (ownerId && this.finishedPlayers.includes(ownerId)) {
+    if (ownerId) {
+      // Nếu chủ combo đã về, tìm người ACTIVE gần nhất để trao quyền lead
       let finderIdx = (this.players.findIndex(p => p.id === ownerId) + 1) % playerCount;
       for (let i = 0; i < playerCount; i++) {
         if (!this.finishedPlayers.includes(this.players[finderIdx].id)) {
@@ -309,6 +320,12 @@ export class GameInstance {
     this.finishedPlayers.push(player.id);
     player.finishedRank = this.finishedPlayers.length;
 
+    // XỬ LÝ QUAN TRỌNG: Nếu người vừa về là chủ combo hiện tại, xóa combo ngay lập tức
+    if (this.lastMove && this.lastMove.playerId === player.id) {
+      this.lastMove = null;
+      this.passedPlayers.clear();
+    }
+
     if (player.finishedRank === 1) {
       this.players.forEach(p => {
         if (p.id !== player.id && !p.hasPlayedAnyCard) {
@@ -320,6 +337,7 @@ export class GameInstance {
 
     const remainingCount = this.players.filter(p => !this.finishedPlayers.includes(p.id)).length;
     if (remainingCount <= 1) {
+      // Tự động gán rank cho những người còn lại
       this.players.forEach(p => { 
         if(!this.finishedPlayers.includes(p.id)) { 
           this.finishedPlayers.push(p.id); 
@@ -340,7 +358,6 @@ export class GameInstance {
     this.lastWasInstantWin = false;
     this.startingPlayerId = this.finishedPlayers[0];
 
-    // Sử dụng logic settleGame mới: Tách biệt tiền cược và tiền thối cho bàn 2-3-4 người
     const settlements = MoneyEngine.settleGame(this.players, this.bet);
 
     settlements.forEach(pay => {
@@ -349,8 +366,6 @@ export class GameInstance {
         p.balance += pay.change;
         this.lastPayouts.push(pay);
         
-        // FIX: Chỉ kích hoạt sự kiện thối cho người BỊ TRỪ TIỀN (người sở hữu heo/hàng thối)
-        // Điều này ngăn chặn việc người nhận tiền thối cũng hiển thị hiệu ứng "bị thối".
         if (pay.change < 0 && pay.reason?.toLowerCase().includes("thối")) {
           this.roundEvents.push({
             type: 'THOI',
