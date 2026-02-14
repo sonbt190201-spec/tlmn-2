@@ -1,0 +1,91 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Tiến Lên Miền Nam - Multiplayer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@18.2.0",
+    "react-dom": "https://esm.sh/react-dom@18.2.0",
+    "react-dom/client": "https://esm.sh/react-dom@18.2.0/client",
+    "react/jsx-runtime": "https://esm.sh/react@18.2.0/jsx-runtime",
+    "framer-motion": "https://esm.sh/framer-motion@10.16.4?external=react,react-dom",
+    "clsx": "https://esm.sh/clsx@2.1.1",
+    "tailwind-merge": "https://esm.sh/tailwind-merge@2.5.4",
+    "uuid": "https://esm.sh/uuid@9.0.0",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "express": "https://esm.sh/express@^5.2.1",
+    "ws": "https://esm.sh/ws@^8.19.0",
+    "path": "https://esm.sh/path@^0.12.7",
+    "fs": "https://esm.sh/fs@^0.0.1-security",
+    "url": "https://esm.sh/url@^0.11.4",
+    "vite": "https://esm.sh/vite@^7.3.1",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.4"
+  }
+}
+</script>
+<style>
+    :root {
+      --sat: env(safe-area-inset-top);
+      --sar: env(safe-area-inset-right);
+      --sab: env(safe-area-inset-bottom);
+      --sal: env(safe-area-inset-left);
+    }
+    body {
+        touch-action: none;
+        -webkit-tap-highlight-color: transparent;
+        user-select: none;
+        overflow: hidden;
+        height: 100vh;
+        height: 100dvh;
+        background-color: #020617;
+    }
+    #root {
+      height: 100%;
+      padding-top: var(--sat);
+      padding-bottom: var(--sab);
+      padding-left: var(--sal);
+      padding-right: var(--sar);
+    }
+    /* Card scaling with clamp */
+    .game-card {
+      height: clamp(60px, 16vw, 140px);
+      width: auto;
+      aspect-ratio: 2/3;
+    }
+
+    /* Tối ưu cho màn hình ngang (iPhone/Android Landscape) */
+    @media (orientation: landscape) {
+      .game-card {
+        height: clamp(50px, 18vh, 100px);
+      }
+      /* Giảm scale các hiệu ứng chữ lớn khi xoay ngang để không bị đè UI */
+      .landscape-scale-text {
+        font-size: clamp(2rem, 8vh, 4rem) !important;
+      }
+      .landscape-shrink {
+        transform: scale(0.85);
+      }
+    }
+
+    /* Hide scrollbars */
+    .scrollbar-hide::-webkit-scrollbar {
+      display: none;
+    }
+    .scrollbar-hide {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+</style>
+<link rel="stylesheet" href="/index.css">
+</head>
+<body class="text-slate-100">
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+</body>
+</html>
