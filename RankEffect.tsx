@@ -1,129 +1,118 @@
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getSharedAudioCtx } from './App';
 
-export type RankType = 1 | 2 | 3 | 4;
+export type SpecialEventType = 'thui_heo' | 'thui_3_doi_thong' | 'thui_tu_quy' | 'chat_heo' | 'chat_chong' | 'chay_bai' | 'info' | 'rank' | 'three_spade_win';
 
-interface RankEffectProps {
-  rank: RankType | null;
+interface SpecialEvent {
+  id: string;
+  type: SpecialEventType;
   playerName: string;
-  onComplete?: () => void;
 }
 
-const playRankSoundSynth = (rank: RankType) => {
+interface SpecialEventAnnouncerProps {
+  event: SpecialEvent | null;
+  onComplete: () => void;
+}
+
+const playApplauseSound = () => {
   const ctx = getSharedAudioCtx();
   if (!ctx) return;
   
   if (ctx.state === 'suspended') ctx.resume();
   
   const master = ctx.createGain();
-  master.gain.value = 0.9;
+  master.gain.value = 1.5; // TĂNG TỪ 0.85 LÊN 1.5
   master.connect(ctx.destination);
   const now = ctx.currentTime;
 
-  if (rank === 1) {
-    [440, 554.37, 659.25, 880].forEach((freq, i) => {
-      const osc = ctx.createOscillator();
-      const g = ctx.createGain();
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(freq, now + i * 0.1);
-      g.gain.setValueAtTime(0, now + i * 0.1);
-      g.gain.linearRampToValueAtTime(0.3, now + i * 0.1 + 0.05);
-      g.gain.exponentialRampToValueAtTime(0.01, now + i * 0.1 + 0.5);
-      osc.connect(g);
-      g.connect(master);
-      osc.start(now + i * 0.1);
-      osc.stop(now + i * 0.1 + 0.6);
-    });
-  } else if (rank === 4) {
-    const osc = ctx.createOscillator();
+  for (let i = 0; i < 15; i++) {
+    const time = now + i * 0.05 + Math.random() * 0.02;
+    const noise = ctx.createBufferSource();
+    const buffer = ctx.createBuffer(1, ctx.sampleRate * 0.1, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let j = 0; j < data.length; j++) data[j] = Math.random() * 2 - 1;
+    noise.buffer = buffer;
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.value = 1000 + Math.random() * 500;
     const g = ctx.createGain();
-    osc.type = 'sawtooth';
-    osc.frequency.setValueAtTime(110, now);
-    osc.frequency.exponentialRampToValueAtTime(55, now + 0.5);
-    g.gain.setValueAtTime(0.3, now);
-    g.gain.exponentialRampToValueAtTime(0.01, now + 0.8);
-    osc.connect(g);
+    g.gain.setValueAtTime(0.4, time);
+    g.gain.exponentialRampToValueAtTime(0.01, time + 0.08);
+    noise.connect(filter);
+    filter.connect(g);
     g.connect(master);
-    osc.start();
-    osc.stop(now + 0.8);
-  } else {
-    const osc = ctx.createOscillator();
-    const g = ctx.createGain();
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(330, now);
-    g.gain.setValueAtTime(0.3, now);
-    g.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
-    osc.connect(g);
-    g.connect(master);
-    osc.start();
-    osc.stop(now + 0.3);
+    noise.start(time);
+    noise.stop(time + 0.1);
   }
 };
 
-const RankEffect: React.FC<RankEffectProps> = ({ rank, playerName, onComplete }) => {
-  const [activeRank, setActiveRank] = useState<RankType | null>(null);
-  const [activeName, setActiveName] = useState("");
-  const audioPlayed = useRef(false);
-
+const SpecialEventAnnouncer: React.FC<SpecialEventAnnouncerProps> = ({ event, onComplete }) => {
   useEffect(() => {
-    if (rank && !audioPlayed.current) {
-      setActiveRank(rank);
-      setActiveName(playerName);
-      audioPlayed.current = true;
-      playRankSoundSynth(rank);
-      const timer = setTimeout(() => {
-        setActiveRank(null);
-        audioPlayed.current = false;
-        if (onComplete) onComplete();
-      }, 2000);
+    if (event) {
+      if (event.type !== 'info') playApplauseSound();
+      const holdTime = event.type === 'info' ? 1200 : 2200;
+      const timer = setTimeout(onComplete, holdTime);
       return () => clearTimeout(timer);
     }
-  }, [rank, playerName, onComplete]);
+  }, [event, onComplete]);
 
-  const getRankConfig = (r: RankType) => {
-    switch (r) {
-      case 1: return { text: "🏆 VỀ NHẤT", color: "text-yellow-400", shadow: "drop-shadow-[0_0_30px_rgba(234,179,8,0.8)]", bg: "from-yellow-500/20" };
-      case 2: return { text: "🥈 VỀ NHÌ", color: "text-slate-300", shadow: "drop-shadow-[0_0_20px_rgba(203,213,225,0.6)]", bg: "from-slate-500/10" };
-      case 3: return { text: "🥉 VỀ BA", color: "text-amber-600", shadow: "drop-shadow-[0_0_15px_rgba(180,83,9,0.5)]", bg: "from-amber-900/10" };
-      case 4: return { text: "💀 VỀ BÉT", color: "text-red-500", shadow: "drop-shadow-[0_0_20px_rgba(239,68,68,0.7)]", bg: "from-red-950/20" };
+  const getConfig = () => {
+    if (!event) return null;
+    switch (event.type) {
+      case 'thui_heo': return { text: `🔥 ${event.playerName} THÚI HEO 🔥`, sub: 'Lêu lêu đồ thối heo!', color: 'text-orange-500', shadow: 'shadow-orange-500/50' };
+      case 'thui_3_doi_thong': return { text: `🎉 ${event.playerName} THÚI 3 ĐÔI THÔNG 🎉`, sub: 'Ba đôi thông mà cũng thối!', color: 'text-pink-500', shadow: 'shadow-pink-500/50' };
+      case 'thui_tu_quy': return { text: `👑 ${event.playerName} THÚI TỨ QUÝ 👑`, sub: 'Tứ quý để làm cảnh à?', color: 'text-purple-500', shadow: 'shadow-purple-500/50' };
+      case 'chat_heo': return { text: `💥 ${event.playerName} BỊ CHẶT HEO 💥`, sub: 'Ăn chặt cho chừa!', color: 'text-red-500', shadow: 'shadow-red-500/50' };
+      case 'chat_chong': return { text: `⚡ ${event.playerName} BỊ CHẶT CHỒNG ⚡`, sub: 'Chặt chồng nè con!', color: 'text-yellow-400', shadow: 'shadow-yellow-400/50' };
+      case 'chay_bai': return { text: `❄️ ${event.playerName} BỊ CÓNG! ❄️`, sub: 'Chưa đánh lá nào đã cháy!', color: 'text-cyan-400', shadow: 'shadow-cyan-400/50' };
+      case 'three_spade_win': return { text: `♠️ ${event.playerName} 3 BÍCH VỀ CHÓT (x2) ♠️`, sub: 'Pha lật kèo đỉnh cao!', color: 'text-emerald-400', shadow: 'shadow-emerald-400/50' };
+      case 'info': return { text: `✨ ${event.playerName} ✨`, sub: '', color: 'text-emerald-400', shadow: 'shadow-emerald-400/50' };
+      default: return null;
     }
   };
 
+  const config = getConfig();
+
   return (
     <AnimatePresence>
-      {activeRank && (
-        <div className="fixed inset-0 z-[2000] flex items-center justify-center pointer-events-none">
+      {event && config && (
+        <>
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className={`absolute inset-0 bg-gradient-to-b ${getRankConfig(activeRank).bg} to-transparent`}
+            transition={{ duration: 0.3 }}
+            className="fixed inset-0 z-[9998] bg-black/70 backdrop-blur-[4px] pointer-events-none"
           />
-          <motion.div
-            initial={{ scale: 0.5, y: 50, opacity: 0 }}
-            animate={{ scale: [0.5, 1.2, 1], y: 0, opacity: 1 }}
-            exit={{ scale: 1.5, opacity: 0, filter: "blur(10px)" }}
-            transition={{ duration: 0.6, times: [0, 0.7, 1], ease: "easeOut" }}
-            className="text-center relative z-10"
-          >
-            <h2 className={`text-5xl md:text-9xl font-black italic tracking-tighter uppercase landscape-scale-text ${getRankConfig(activeRank).color} ${getRankConfig(activeRank).shadow}`}>
-              {getRankConfig(activeRank).text}
-            </h2>
-            <motion.p
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
-              className="mt-2 text-lg md:text-3xl font-black text-white uppercase tracking-widest drop-shadow-md"
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center pointer-events-none p-4">
+            <motion.div
+              initial={{ scale: 0.5, opacity: 0, y: 20 }}
+              animate={{ 
+                scale: [0.5, 1.1, 1], 
+                opacity: 1,
+                y: 0,
+                rotate: event.type === 'info' ? 0 : [0, -1, 1, -1, 1, 0]
+              }}
+              exit={{ scale: 0.8, opacity: 0, y: -20, filter: "blur(10px)" }}
+              transition={{ duration: 0.4, ease: 'backOut' }}
+              className="text-center"
             >
-              {activeName}
-            </motion.p>
-          </motion.div>
-        </div>
+              <div className="bg-slate-900/95 border border-white/20 px-6 py-6 md:px-8 md:py-8 rounded-[30px] md:rounded-[40px] shadow-[0_0_50px_rgba(0,0,0,0.5)] flex flex-col items-center gap-2 md:gap-4 landscape:scale-90">
+                <h2 className={`${event.type === 'info' ? 'text-xl md:text-4xl' : 'text-2xl md:text-6xl'} font-black italic uppercase tracking-tighter ${config.color} drop-shadow-[0_0_30px_rgba(255,255,255,0.3)] landscape-scale-text`}>
+                  {config.text}
+                </h2>
+                {config.sub && (
+                   <p className="text-white/60 text-[10px] md:text-sm font-bold uppercase tracking-widest">{config.sub}</p>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        </>
       )}
     </AnimatePresence>
   );
 };
 
-export default RankEffect;
+export default SpecialEventAnnouncer;
