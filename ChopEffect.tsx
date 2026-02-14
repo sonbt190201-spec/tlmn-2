@@ -18,7 +18,8 @@ const playChopSoundSynth = (type: ChopType) => {
   if (ctx.state === 'suspended') ctx.resume();
   
   const master = ctx.createGain();
-  master.gain.value = 1.5; // TĂNG TỪ 1.0 LÊN 1.5
+  // TĂNG ÂM LƯỢNG LÊN 2.5
+  master.gain.value = 2.5; 
   master.connect(ctx.destination);
   const now = ctx.currentTime;
 

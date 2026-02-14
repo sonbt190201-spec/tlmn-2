@@ -73,8 +73,8 @@ const playSfx = (type: 'play' | 'pass' | 'deal' | 'click' | 'win') => {
   if (ctx.state === 'suspended') ctx.resume();
   const now = ctx.currentTime;
   const master = ctx.createGain();
-  // TĂNG ÂM LƯỢNG SFX TỐI ĐA
-  master.gain.value = 1.8; 
+  // TĂNG ÂM LƯỢNG SFX TỪ 1.8 LÊN 2.5
+  master.gain.value = 2.5; 
   master.connect(ctx.destination);
 
   switch (type) {
@@ -86,7 +86,7 @@ const playSfx = (type: 'play' | 'pass' | 'deal' | 'click' | 'win') => {
         oscD.type = 'sine';
         oscD.frequency.setValueAtTime(800 + (i * 20), time);
         oscD.frequency.exponentialRampToValueAtTime(400, time + 0.05);
-        gD.gain.setValueAtTime(0.2, time);
+        gD.gain.setValueAtTime(0.3, time);
         gD.gain.exponentialRampToValueAtTime(0.01, time + 0.05);
         oscD.connect(gD); gD.connect(master);
         oscD.start(time); oscD.stop(time + 0.05);
@@ -98,7 +98,7 @@ const playSfx = (type: 'play' | 'pass' | 'deal' | 'click' | 'win') => {
       oscP.type = 'triangle';
       oscP.frequency.setValueAtTime(150, now);
       oscP.frequency.exponentialRampToValueAtTime(60, now + 0.15);
-      gP.gain.setValueAtTime(0.8, now);
+      gP.gain.setValueAtTime(1.0, now);
       gP.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
       oscP.connect(gP); gP.connect(master);
       oscP.start(); oscP.stop(now + 0.15);
@@ -109,7 +109,7 @@ const playSfx = (type: 'play' | 'pass' | 'deal' | 'click' | 'win') => {
       oscS.type = 'sine';
       oscS.frequency.setValueAtTime(300, now);
       oscS.frequency.linearRampToValueAtTime(500, now + 0.2);
-      gS.gain.setValueAtTime(0.3, now);
+      gS.gain.setValueAtTime(0.4, now);
       gS.gain.linearRampToValueAtTime(0, now + 0.2);
       oscS.connect(gS); gS.connect(master);
       oscS.start(); oscS.stop(now + 0.2);
@@ -119,7 +119,7 @@ const playSfx = (type: 'play' | 'pass' | 'deal' | 'click' | 'win') => {
       const gC = ctx.createGain();
       oscC.type = 'sine';
       oscC.frequency.setValueAtTime(1200, now);
-      gC.gain.setValueAtTime(0.3, now);
+      gC.gain.setValueAtTime(0.4, now);
       gC.gain.exponentialRampToValueAtTime(0.01, now + 0.05);
       oscC.connect(gC); gC.connect(master);
       oscC.start(); oscC.stop(now + 0.05);
@@ -279,10 +279,10 @@ const SettingsModal: React.FC<{ currentBet: number, onUpdate: (bet: number) => v
   );
 };
 
-const CardComponent: React.FC<{ card: Card | null; isSelected?: boolean; onClick?: () => void; isDealing?: boolean; index?: number }> = ({ card, isSelected, onClick, isDealing, index = 0 }) => {
+const CardComponent: React.FC<{ card: Card | null; isSelected?: boolean; onClick?: () => void; isDealing?: boolean; index?: number; style?: React.CSSProperties }> = ({ card, isSelected, onClick, isDealing, index = 0, style }) => {
   if (!card) {
     return (
-      <div className="game-card bg-slate-800 rounded-md border border-slate-700 flex items-center justify-center shadow-md">
+      <div className="game-card bg-slate-800 rounded-md border border-slate-700 flex items-center justify-center shadow-md" style={style}>
         <div className="w-[70%] h-[70%] border border-slate-600 rounded flex items-center justify-center opacity-10">
           <span className="text-[10px] md:text-xl font-black">TL</span>
         </div>
@@ -292,6 +292,7 @@ const CardComponent: React.FC<{ card: Card | null; isSelected?: boolean; onClick
   return (
     <motion.div
       layoutId={card.id}
+      style={style}
       initial={isDealing ? { x: 0, y: -300, opacity: 0, rotate: 180, scale: 0.5 } : false}
       animate={isDealing ? { x: 0, y: isSelected ? -15 : 0, opacity: 1, rotate: 0, scale: 1 } : { y: isSelected ? -15 : 0, opacity: 1, scale: 1 }}
       transition={{ delay: isDealing ? index * 0.08 : 0, type: "spring", stiffness: 150, damping: 18 }}
@@ -409,7 +410,6 @@ const App: React.FC = () => {
       // FIX VOICE: Thử phát lại ngay khi có track
       audio.play().catch(err => {
          console.debug("Autoplay deferred, waiting for user interaction", err);
-         // Thêm nút bấm khẩn cấp nếu cần (ẩn)
       });
     };
 
@@ -656,13 +656,29 @@ const App: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {/* FIXED LANDSCAPE LAYOUT: Tăng padding, giảm space bài */}
       <div className="bg-slate-900/90 backdrop-blur-xl border-t border-white/10 pt-1 pb-safe px-2 z-[100] landscape:h-[35vh] flex flex-col justify-end">
-          <div className="max-w-full mx-auto flex -space-x-8 md:-space-x-10 justify-center overflow-x-auto scrollbar-hide py-2 px-10 landscape:py-0 landscape:-space-x-12">
+          <div className="max-w-full mx-auto flex justify-center py-2 px-10 landscape:py-0 overflow-visible">
              <AnimatePresence>
-               {me?.hand?.map((c: any, idx: number) => (
-                 <CardComponent key={c.id || idx} card={c} isDealing={dealingCards} index={idx} isSelected={selectedCards.includes(c?.id)} onClick={() => setSelectedCards(prev => prev.includes(c.id) ? prev.filter(id => id !== c.id) : [...prev, c.id])} />
-               ))}
+               {me?.hand?.map((c: any, idx: number) => {
+                 const handSize = me?.hand?.length || 0;
+                 const isMobile = window.innerWidth < 768;
+                 // Động hóa độ chồng lấn: Càng nhiều bài thì -maxOverlap, càng ít bài thì giãn ra
+                 const maxOverlap = isMobile ? 48 : 85;
+                 const overlap = handSize > 5 ? maxOverlap : (maxOverlap * 0.4);
+                 const style = idx > 0 ? { marginLeft: `-${overlap}px` } : {};
+                 
+                 return (
+                   <CardComponent 
+                     key={c.id || idx} 
+                     card={c} 
+                     style={style}
+                     isDealing={dealingCards} 
+                     index={idx} 
+                     isSelected={selectedCards.includes(c?.id)} 
+                     onClick={() => setSelectedCards(prev => prev.includes(c.id) ? prev.filter(id => id !== c.id) : [...prev, c.id])} 
+                   />
+                 );
+               })}
              </AnimatePresence>
           </div>
           <div className="flex justify-between items-center py-2 max-w-lg mx-auto gap-4 landscape:py-1">
