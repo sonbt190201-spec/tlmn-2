@@ -73,7 +73,7 @@ const playSfx = (type: 'play' | 'pass' | 'deal' | 'click' | 'win') => {
   if (ctx.state === 'suspended') ctx.resume();
   const now = ctx.currentTime;
   const master = ctx.createGain();
-  // TĂNG ÂM LƯỢNG SFX TỪ 1.8 LÊN 2.5
+  // TĂNG ÂM LƯỢ lượng SFX TỪ 1.8 LÊN 2.5
   master.gain.value = 2.5; 
   master.connect(ctx.destination);
 
@@ -289,13 +289,30 @@ const CardComponent: React.FC<{ card: Card | null; isSelected?: boolean; onClick
       </div>
     );
   }
+
+  // Luôn đảm bảo zIndex được quản lý bởi animate để không bị layout projection đè lớp
+  const z = isSelected ? 1000 : (style?.zIndex ?? index);
+
   return (
     <motion.div
       layoutId={card.id}
-      style={style}
-      initial={isDealing ? { x: 0, y: -300, opacity: 0, rotate: 180, scale: 0.5 } : false}
-      animate={isDealing ? { x: 0, y: isSelected ? -15 : 0, opacity: 1, rotate: 0, scale: 1 } : { y: isSelected ? -15 : 0, opacity: 1, scale: 1 }}
-      transition={{ delay: isDealing ? index * 0.08 : 0, type: "spring", stiffness: 150, damping: 18 }}
+      style={{ ...style, zIndex: undefined }} // Gỡ zIndex khỏi style tĩnh để đưa vào animate
+      initial={isDealing ? { x: 0, y: -300, opacity: 0, rotate: 180, scale: 0.5, zIndex: z } : { zIndex: z }}
+      animate={{
+        x: 0,
+        y: isSelected ? -15 : 0,
+        opacity: 1,
+        rotate: 0,
+        scale: 1,
+        zIndex: z // Ép framer-motion duy trì z-index trong suốt quá trình layout
+      }}
+      transition={{ 
+        delay: isDealing ? index * 0.08 : 0, 
+        type: "spring", 
+        stiffness: 150, 
+        damping: 18,
+        zIndex: { duration: 0 } // Thay đổi zIndex ngay lập tức
+      }}
       onClick={onClick}
       whileHover={{ y: -5 }}
       className={`relative game-card bg-white rounded-md md:rounded-lg shadow-xl cursor-pointer select-none flex flex-col p-1 md:p-2 border ${isSelected ? 'border-yellow-400 ring-2 ring-yellow-400/50' : 'border-slate-200'}`}
@@ -663,11 +680,11 @@ const App: React.FC = () => {
                  const handSize = me?.hand?.length || 0;
                  const isMobile = window.innerWidth < 768;
                  // Tinh chỉnh zIndex: Lá bên phải (idx lớn) nằm trên lá bên trái (idx nhỏ)
-                 // Tinh chỉnh overlap: Chỉ overlap nhiều khi bài nhiều (> 6 lá)
-                 const maxOverlap = isMobile ? 45 : 75;
-                 const overlap = handSize > 1 ? (handSize > 6 ? maxOverlap : maxOverlap * 0.4) : 0;
+                 // Tinh chỉnh overlap: Đảm bảo không quá sát để lộ mặt bài
+                 const maxOverlap = isMobile ? 42 : 68;
+                 const overlap = handSize > 1 ? (handSize > 6 ? maxOverlap : maxOverlap * 0.45) : 0;
                  const style: React.CSSProperties = { 
-                   zIndex: idx, 
+                   zIndex: idx, // Đảm bảo idx lớn (lá bên phải) có zIndex cao hơn
                    marginLeft: idx > 0 ? `-${overlap}px` : '0px',
                    position: 'relative'
                  };
