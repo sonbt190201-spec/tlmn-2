@@ -248,6 +248,7 @@ const CardComponent: React.FC<{ card: Card | null; isSelected?: boolean; onClick
       whileHover={{ y: -5 }}
       className={`relative game-card bg-white rounded-md md:rounded-lg shadow-xl cursor-pointer select-none flex flex-col p-1 md:p-2 border ${isSelected ? 'border-yellow-400 ring-2 ring-yellow-400/50' : 'border-slate-200'}`}
     >
+      {/* Fixed: Use card.rank instead of rank to resolve "Cannot find name 'rank'" error */}
       <div className={`text-[12px] md:text-2xl font-black leading-none ${SUIT_COLORS[card.suit]}`}>{getRankLabel(card.rank)}</div>
       <div className={`text-[10px] md:text-xl ${SUIT_COLORS[card.suit]}`}>{SUIT_SYMBOLS[card.suit]}</div>
       <div className={`absolute bottom-0.5 right-0.5 text-2xl md:text-5xl opacity-10 ${SUIT_COLORS[card.suit]}`}>{SUIT_SYMBOLS[card.suit]}</div>
@@ -580,8 +581,8 @@ const App: React.FC = () => {
             </motion.div>
           )}
 
-          {/* Player hand with overlapping cards - right overlaps 1/3 of left */}
-          <div className="max-w-full mx-auto flex -space-x-6 md:-space-x-10 justify-center overflow-x-auto scrollbar-hide py-3 px-10">
+          {/* Player hand with overlapping cards - adjusted to be more visible in landscape */}
+          <div className="max-w-full mx-auto flex -space-x-4 md:-space-x-8 justify-center overflow-x-auto scrollbar-hide py-3 px-10">
              <AnimatePresence>
                {me?.hand?.map((c: any, idx: number) => (
                  <CardComponent key={c.id || idx} card={c} isDealing={dealingCards} index={idx} isSelected={selectedCards.includes(c?.id)} onClick={() => setSelectedCards(prev => prev.includes(c.id) ? prev.filter(id => id !== c.id) : [...prev, c.id])} />
