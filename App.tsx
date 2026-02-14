@@ -663,11 +663,12 @@ const App: React.FC = () => {
                  const handSize = me?.hand?.length || 0;
                  const isMobile = window.innerWidth < 768;
                  // Động hóa độ chồng lấn: Càng nhiều bài thì -maxOverlap, càng ít bài thì giãn ra
-                 const maxOverlap = isMobile ? 38 : 65; 
-                 const overlap = handSize > 1 ? maxOverlap : 0;
+                 const maxOverlap = isMobile ? 42 : 70; 
+                 const overlap = handSize > 1 ? (handSize > 8 ? maxOverlap : maxOverlap * 0.6) : 0;
                  const style: React.CSSProperties = { 
-                   zIndex: handSize - idx,
-                   marginLeft: idx > 0 ? `-${overlap}px` : '0px'
+                   zIndex: idx, // z-index tăng dần để lá bên phải đè lên lá bên trái
+                   marginLeft: idx > 0 ? `-${overlap}px` : '0px',
+                   position: 'relative'
                  };
                  
                  return (
