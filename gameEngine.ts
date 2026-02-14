@@ -22,7 +22,6 @@ export class GameEngine {
   pendingChopAmount: number;
   lastChopCulprit: string | null;
   startingPlayerId: string | null;
-  private matchEvents: any[] = [];
   
   recentTransactions: MoneyTransaction[] = [];
 
@@ -99,7 +98,6 @@ export class GameEngine {
     this.pendingChopWinner = null;
     this.lastChopCulprit = null;
     this.recentTransactions = []; 
-    this.matchEvents = [];
     
     this.startNewRound();
   }
@@ -120,7 +118,6 @@ export class GameEngine {
     this.pendingChopWinner = null;
     this.lastChopCulprit = null;
     this.recentTransactions = []; 
-    this.matchEvents = [];
     
     this.players.forEach(p => {
       const handData = hands.find(h => h.playerId === p.id);
@@ -147,22 +144,18 @@ export class GameEngine {
   }
 
   processInstantWin(winnerId: string, reason: string) {
-    try {
-      this.finishedPlayers = [winnerId];
-      this.players.forEach(p => {
-        if (p.id !== winnerId) this.finishedPlayers.push(p.id);
-      });
-      
-      const payouts = MoneyEngine.calculateInstantWin(winnerId, this.players.map(p => p.id), this.bet);
-      this.applyMoneyTransaction(payouts, "INSTANT_WIN", reason);
-      
-      this.gamePhase = "finished";
-      this.startingPlayerId = winnerId;
-      this.isFirstGame = false;
-      this.matchEvents.push({ type: "INSTANT_WIN", player: winnerId, reason });
-    } finally {
-      this.recordHistory();
-    }
+    this.finishedPlayers = [winnerId];
+    this.players.forEach(p => {
+      if (p.id !== winnerId) this.finishedPlayers.push(p.id);
+    });
+    
+    const payouts = MoneyEngine.calculateInstantWin(winnerId, this.players.map(p => p.id), this.bet);
+    this.applyMoneyTransaction(payouts, "INSTANT_WIN", reason);
+    
+    this.gamePhase = "finished";
+    this.startingPlayerId = winnerId;
+    this.isFirstGame = false;
+    this.recordHistory();
   }
 
   recordHistory() {
@@ -203,8 +196,7 @@ export class GameEngine {
       roundId: Math.random().toString(36).substr(2, 5),
       timestamp: Date.now(),
       bet: this.bet,
-      players: playersHistory,
-      events: [...this.matchEvents]
+      players: playersHistory
     };
 
     this.history.push(historyItem);
@@ -232,12 +224,6 @@ export class GameEngine {
       this.pendingChopAmount += this.bet; 
       this.pendingChopWinner = playerId;
       this.lastChopCulprit = this.lastMove.playerId;
-      this.matchEvents.push({
-        type: this.pendingChopAmount > this.bet ? "HEO_OVER_CUT" : "HEO_CUT",
-        from: this.lastChopCulprit,
-        to: this.pendingChopWinner,
-        amount: this.pendingChopAmount
-      });
     }
 
     player.hand = player.hand.filter(c => !cardIds.includes(c.id));
@@ -255,6 +241,7 @@ export class GameEngine {
   isChop(newType: HandType, lastMove: Move | null): boolean {
     if (!lastMove) return false;
     
+    // PHÂN BIỆT RÕ: Chặt chỉ xảy ra khi dùng Hàng (3 đôi thông, Tứ quý, 4 đôi thông)
     const isAttackerHang = (newType === HandType.THREE_CONSECUTIVE_PAIRS || 
                             newType === HandType.FOUR_OF_A_KIND || 
                             newType === HandType.FOUR_CONSECUTIVE_PAIRS);
@@ -264,6 +251,8 @@ export class GameEngine {
                           lastMove.type === HandType.FOUR_OF_A_KIND || 
                           lastMove.type === HandType.FOUR_CONSECUTIVE_PAIRS);
 
+    // Điều kiện Chặt: PHẢI là dùng Hàng chặn Heo HOẶC chặn Hàng khác
+    // Nếu cả 2 đều là SINGLE/PAIR Heo -> isAttackerHang = false -> returns false
     return isAttackerHang && (isVictimHeo || isVictimHang);
   }
 
@@ -273,10 +262,7 @@ export class GameEngine {
 
     if (player.finishedRank === 1) {
       this.players.forEach(p => {
-        if (p.id !== player.id && !p.hasPlayedAnyCard) {
-          p.isBurned = true;
-          this.matchEvents.push({ type: "HEO_BURN", player: p.id });
-        }
+        if (p.id !== player.id && !p.hasPlayedAnyCard) p.isBurned = true;
       });
     }
 
@@ -350,41 +336,32 @@ export class GameEngine {
   }
 
   endRound() {
-    if (this.gamePhase === "finished") return;
-    try {
-      this.gamePhase = "finished";
-      this.isFirstGame = false;
-      this.startingPlayerId = this.finishedPlayers[0];
+    this.gamePhase = "finished";
+    this.isFirstGame = false;
+    this.startingPlayerId = this.finishedPlayers[0];
 
-      const winnerId = this.finishedPlayers[0];
-      const isBurnedMap: Record<string, boolean> = {};
-      this.players.forEach(p => isBurnedMap[p.id] = p.isBurned);
-      
-      const rankPayouts = MoneyEngine.calculateGameEnd(this.players, this.bet, isBurnedMap);
-      const hasAnyBurn = Object.values(isBurnedMap).some(v => v);
-      this.applyMoneyTransaction(rankPayouts, hasAnyBurn ? "BURN" : "RANK", "KẾT QUẢ");
+    const winnerId = this.finishedPlayers[0];
+    const isBurnedMap: Record<string, boolean> = {};
+    this.players.forEach(p => isBurnedMap[p.id] = p.isBurned);
+    
+    const rankPayouts = MoneyEngine.calculateGameEnd(this.players, this.bet, isBurnedMap);
+    const hasAnyBurn = Object.values(isBurnedMap).some(v => v);
+    this.applyMoneyTransaction(rankPayouts, hasAnyBurn ? "BURN" : "RANK", "KẾT QUẢ");
 
-      const burnedPlayers = this.players.filter(p => p.isBurned);
-      const losersForThui = burnedPlayers.length > 0 ? burnedPlayers : [this.players.find(p => p.id === this.finishedPlayers[3])!];
-      
-      losersForThui.forEach(loser => {
-         if (!loser) return;
-         const thuiResult = MoneyEngine.calculateThui(loser, this.bet);
-         if (thuiResult.totalLoss > 0) {
-           this.applyMoneyTransaction([
-             { playerId: loser.id, change: -thuiResult.totalLoss },
-             { playerId: winnerId, change: thuiResult.totalLoss }
-           ], "THUI", `THÚI BÀI (${loser.name})`, loser.id);
-           this.matchEvents.push({
-             type: "HEO_STALE",
-             player: loser.id,
-             to: winnerId,
-             amount: thuiResult.totalLoss
-           });
-         }
-      });
-    } finally {
-      this.recordHistory();
-    }
+    const burnedPlayers = this.players.filter(p => p.isBurned);
+    const losersForThui = burnedPlayers.length > 0 ? burnedPlayers : [this.players.find(p => p.id === this.finishedPlayers[3])!];
+    
+    losersForThui.forEach(loser => {
+       if (!loser) return;
+       const thuiResult = MoneyEngine.calculateThui(loser, this.bet);
+       if (thuiResult.totalLoss > 0) {
+         this.applyMoneyTransaction([
+           { playerId: loser.id, change: -thuiResult.totalLoss },
+           { playerId: winnerId, change: thuiResult.totalLoss }
+         ], "THUI", `THÚI BÀI (${loser.name})`, loser.id);
+       }
+    });
+    
+    this.recordHistory();
   }
 }

@@ -1,5 +1,5 @@
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { getSharedAudioCtx } from './App';
 
@@ -18,8 +18,7 @@ const playChopSoundSynth = (type: ChopType) => {
   if (ctx.state === 'suspended') ctx.resume();
   
   const master = ctx.createGain();
-  // TĂNG ÂM LƯỢNG LÊN 2.5
-  master.gain.value = 2.5; 
+  master.gain.value = 1.0;
   master.connect(ctx.destination);
   const now = ctx.currentTime;
 
@@ -34,7 +33,9 @@ const playChopSoundSynth = (type: ChopType) => {
   noiseFilter.Q.value = 10;
   const noiseGain = ctx.createGain();
   noiseGain.gain.setValueAtTime(0, now);
-  noiseGain.gain.linearRampToValueAtTime(0.4, now + 0.1);
+  // Fix: Call linearRampToValueAtTime on .gain AudioParam
+  noiseGain.gain.linearRampToValueAtTime(0.3, now + 0.1);
+  // Fix: Call exponentialRampToValueAtTime on .gain AudioParam
   noiseGain.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
   noiseFilter.frequency.setValueAtTime(200, now);
   noiseFilter.frequency.exponentialRampToValueAtTime(2000, now + 0.2);
@@ -49,7 +50,7 @@ const playChopSoundSynth = (type: ChopType) => {
   osc.frequency.setValueAtTime(150, now + 0.1);
   osc.frequency.exponentialRampToValueAtTime(40, now + 0.3);
   oscGain.gain.setValueAtTime(0, now + 0.1);
-  oscGain.gain.linearRampToValueAtTime(1.2, now + 0.12);
+  oscGain.gain.linearRampToValueAtTime(1, now + 0.12);
   oscGain.gain.exponentialRampToValueAtTime(0.01, now + 0.6);
   osc.connect(oscGain);
   oscGain.connect(master);
@@ -61,7 +62,7 @@ const playChopSoundSynth = (type: ChopType) => {
   sub.type = 'sine';
   sub.frequency.setValueAtTime(50, now + 0.12);
   subGain.gain.setValueAtTime(0, now + 0.12);
-  subGain.gain.linearRampToValueAtTime(1.0, now + 0.15);
+  subGain.gain.linearRampToValueAtTime(0.8, now + 0.15);
   subGain.gain.exponentialRampToValueAtTime(0.01, now + (type === 'three_pairs' ? 0.8 : 1.5));
   sub.connect(subGain);
   subGain.connect(master);
@@ -74,7 +75,9 @@ const playChopSoundSynth = (type: ChopType) => {
     metal.type = 'square';
     metal.frequency.setValueAtTime(1200, now + 0.11);
     metalGain.gain.setValueAtTime(0, now + 0.11);
-    metalGain.gain.linearRampToValueAtTime(0.3, now + 0.12);
+    // Fix: Call linearRampToValueAtTime on .gain AudioParam
+    metalGain.gain.linearRampToValueAtTime(0.2, now + 0.12);
+    // Fix: Call exponentialRampToValueAtTime on .gain AudioParam
     metalGain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
     metal.connect(metalGain);
     metalGain.connect(master);
@@ -85,10 +88,14 @@ const playChopSoundSynth = (type: ChopType) => {
 
 const ChopEffect: React.FC<ChopEffectProps> = ({ isChopHeo, chopType, onComplete }) => {
   useEffect(() => {
+    // Luôn chạy âm thanh khi component mount
     playChopSoundSynth(chopType);
+    
+    // Tự động báo hoàn thành sau 2.5s để App xóa khỏi Queue
     const timer = setTimeout(() => {
       onComplete?.();
     }, 2500);
+    
     return () => clearTimeout(timer);
   }, [chopType, onComplete]);
 
@@ -116,7 +123,7 @@ const ChopEffect: React.FC<ChopEffectProps> = ({ isChopHeo, chopType, onComplete
       <motion.div
         initial={{ scale: 0.3, opacity: 0, rotate: -10 }}
         animate={{ 
-          scale: [0.3, 1.4, 1.1],
+          scale: [0.3, 1.6, 1.3],
           opacity: [0, 1, 1],
           rotate: [10, -5, 0],
           x: [-15, 15, -12, 12, -8, 8, -5, 5, 0],
@@ -127,19 +134,19 @@ const ChopEffect: React.FC<ChopEffectProps> = ({ isChopHeo, chopType, onComplete
         className="fixed inset-0 z-[1000] flex items-center justify-center pointer-events-none"
       >
         <div className="text-center">
-          <h1 className={`text-6xl md:text-9xl font-black italic tracking-tighter uppercase select-none landscape-scale-text ${getGlowColor()}`}>
+          <h1 className={`text-7xl md:text-9xl font-black italic tracking-tighter uppercase select-none ${getGlowColor()}`}>
             CHẶT HEO!
           </h1>
           <motion.div 
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.1 }}
-            className="mt-4 flex flex-col items-center gap-1"
+            className="mt-6 flex flex-col items-center gap-2"
           >
-            <p className="text-white text-xl md:text-2xl font-black uppercase tracking-[0.4em] drop-shadow-lg">
+            <p className="text-white text-2xl font-black uppercase tracking-[0.4em] drop-shadow-lg">
               {chopType === "four_pairs" ? "4 ĐÔI THÔNG SIÊU CẤP" : chopType === "four_of_a_kind" ? "TỨ QUÝ QUYỀN NĂNG" : "3 ĐÔI THÔNG"}
             </p>
-            <div className={`h-1 w-32 md:w-48 rounded-full ${chopType === 'four_pairs' ? 'bg-red-500' : 'bg-yellow-500'} shadow-lg`}></div>
+            <div className={`h-1 w-48 rounded-full ${chopType === 'four_pairs' ? 'bg-red-500' : 'bg-yellow-500'} shadow-lg`}></div>
           </motion.div>
         </div>
       </motion.div>

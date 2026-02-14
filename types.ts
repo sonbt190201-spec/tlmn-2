@@ -46,10 +46,7 @@ export interface PayoutResult {
   reason?: string;
 }
 
-/**
- * Interface for tracking money transactions during a game session.
- * Used by GameEngine to manage balance updates and history.
- */
+// Added MoneyTransaction interface to fix error in gameEngine.ts
 export interface MoneyTransaction {
   id: string;
   type: MoneyChangeType;
@@ -59,13 +56,13 @@ export interface MoneyTransaction {
   sourcePlayerId?: string;
 }
 
-export interface MatchEvent {
-  type: "HEO_CUT" | "HEO_OVER_CUT" | "HEO_STALE" | "HEO_BURN" | "INSTANT_WIN" | "THREE_SPADE_WIN";
-  from?: string;
-  to?: string;
-  player?: string;
+export interface GameEventRecord {
+  type: string;
+  fromPlayerId?: string;
+  toPlayerId?: string;
+  playerName?: string;
   amount?: number;
-  reason?: string;
+  description: string;
 }
 
 export interface PlayerHistoryEntry {
@@ -79,7 +76,7 @@ export interface PlayerHistoryEntry {
   transactions?: {
     reason: string;
     amount: number;
-    type: MoneyChangeType;
+    type: string;
   }[];
 }
 
@@ -88,7 +85,7 @@ export interface GameHistory {
   timestamp: number;
   bet: number;
   players: PlayerHistoryEntry[];
-  events: MatchEvent[];
+  events?: GameEventRecord[];
 }
 
 export interface ChatMessage {

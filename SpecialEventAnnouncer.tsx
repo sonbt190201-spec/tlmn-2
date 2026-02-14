@@ -23,7 +23,7 @@ const playApplauseSound = () => {
   if (ctx.state === 'suspended') ctx.resume();
   
   const master = ctx.createGain();
-  master.gain.value = 1.5; // TĂNG TỪ 0.85 LÊN 1.5
+  master.gain.value = 0.85;
   master.connect(ctx.destination);
   const now = ctx.currentTime;
 
@@ -38,7 +38,7 @@ const playApplauseSound = () => {
     filter.type = 'bandpass';
     filter.frequency.value = 1000 + Math.random() * 500;
     const g = ctx.createGain();
-    g.gain.setValueAtTime(0.4, time);
+    g.gain.setValueAtTime(0.3, time);
     g.gain.exponentialRampToValueAtTime(0.01, time + 0.08);
     noise.connect(filter);
     filter.connect(g);
@@ -52,6 +52,8 @@ const SpecialEventAnnouncer: React.FC<SpecialEventAnnouncerProps> = ({ event, on
   useEffect(() => {
     if (event) {
       if (event.type !== 'info') playApplauseSound();
+      
+      // Tổng thời gian hiển thị: 2.5s (300ms in + 1900ms hold + 300ms out)
       const holdTime = event.type === 'info' ? 1200 : 2200;
       const timer = setTimeout(onComplete, holdTime);
       return () => clearTimeout(timer);
@@ -86,7 +88,7 @@ const SpecialEventAnnouncer: React.FC<SpecialEventAnnouncerProps> = ({ event, on
             transition={{ duration: 0.3 }}
             className="fixed inset-0 z-[9998] bg-black/70 backdrop-blur-[4px] pointer-events-none"
           />
-          <div className="fixed inset-0 z-[9999] flex items-center justify-center pointer-events-none p-4">
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center pointer-events-none p-6">
             <motion.div
               initial={{ scale: 0.5, opacity: 0, y: 20 }}
               animate={{ 
@@ -99,14 +101,33 @@ const SpecialEventAnnouncer: React.FC<SpecialEventAnnouncerProps> = ({ event, on
               transition={{ duration: 0.4, ease: 'backOut' }}
               className="text-center"
             >
-              <div className="bg-slate-900/95 border border-white/20 px-6 py-6 md:px-8 md:py-8 rounded-[30px] md:rounded-[40px] shadow-[0_0_50px_rgba(0,0,0,0.5)] flex flex-col items-center gap-2 md:gap-4 landscape:scale-90">
-                <h2 className={`${event.type === 'info' ? 'text-xl md:text-4xl' : 'text-2xl md:text-6xl'} font-black italic uppercase tracking-tighter ${config.color} drop-shadow-[0_0_30px_rgba(255,255,255,0.3)] landscape-scale-text`}>
+              <div className="bg-slate-900/95 border border-white/20 px-8 py-8 rounded-[40px] shadow-[0_0_50px_rgba(0,0,0,0.5)] flex flex-col items-center gap-4">
+                <h2 className={`${event.type === 'info' ? 'text-2xl md:text-4xl' : 'text-3xl md:text-6xl'} font-black italic uppercase tracking-tighter ${config.color} drop-shadow-[0_0_30px_rgba(255,255,255,0.3)]`}>
                   {config.text}
                 </h2>
                 {config.sub && (
-                   <p className="text-white/60 text-[10px] md:text-sm font-bold uppercase tracking-widest">{config.sub}</p>
+                   <p className="text-white/60 text-sm font-bold uppercase tracking-widest">{config.sub}</p>
                 )}
               </div>
+              
+              {event.type !== 'info' && (
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[150%] h-[150%] -z-10 overflow-visible">
+                  {Array.from({ length: 20 }).map((_, i) => (
+                    <motion.div
+                      key={i}
+                      initial={{ scale: 0, x: 0, y: 0 }}
+                      animate={{ 
+                        scale: [0, 1, 0],
+                        x: (Math.random() - 0.5) * 600,
+                        y: (Math.random() - 0.5) * 600,
+                        rotate: Math.random() * 360
+                      }}
+                      transition={{ duration: 2, delay: Math.random() * 0.5, repeat: Infinity }}
+                      className={`absolute w-3 h-3 rounded-full ${i % 3 === 0 ? 'bg-yellow-400' : i % 3 === 1 ? 'bg-red-500' : 'bg-cyan-400'} blur-[1px]`}
+                    />
+                  ))}
+                </div>
+              )}
             </motion.div>
           </div>
         </>

@@ -93,7 +93,7 @@ const TrollModule: React.FC<TrollModuleProps> = ({ activeTrolls, playerPositions
   }, [activeTrolls]);
 
   return (
-    <div className="fixed inset-0 pointer-events-none z-[9999] overflow-hidden">
+    <div className="fixed inset-0 pointer-events-none z-[999] overflow-hidden">
       <AnimatePresence>
         {activeTrolls.map((troll) => {
           const start = playerPositions[troll.fromId] || { x: '50%', y: '85dvh' };
@@ -117,7 +117,7 @@ const TrollModule: React.FC<TrollModuleProps> = ({ activeTrolls, playerPositions
                   opacity: [0, 1, 1, 0]
                 }}
                 transition={{ duration: 0.65, ease: "circIn", times: [0, 0.2, 0.9, 1] }}
-                className="absolute text-5xl -translate-x-1/2 -translate-y-1/2 z-[10001] drop-shadow-2xl"
+                className="absolute text-5xl -translate-x-1/2 -translate-y-1/2 z-[1010] drop-shadow-2xl"
               >
                 {TROLL_CONFIG[troll.type].emoji}
               </motion.div>
@@ -131,7 +131,7 @@ const TrollModule: React.FC<TrollModuleProps> = ({ activeTrolls, playerPositions
                   top: end.y
                 }}
                 transition={{ delay: 0.6, duration: 1.2 }}
-                className="absolute -translate-x-1/2 -translate-y-1/2 pointer-events-none z-[10000]"
+                className="absolute -translate-x-1/2 -translate-y-1/2 pointer-events-none z-[1005]"
               >
                 {troll.type === 'stone' && (
                   <div className="relative w-48 h-48 flex items-center justify-center">
