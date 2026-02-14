@@ -99,7 +99,6 @@ function updateGlobalStats(room: Room) {
 
     if (p.isBurned) ps.stats.totalCongCount++;
 
-    // Thống kê sự kiện từ event list
     lastGame.events.forEach(ev => {
       if (ev.toPlayerId === p.id && (ev.type === 'CHOP' || ev.type === 'OVER_CHOP')) {
         ps.stats.totalHeoCut++;
@@ -154,7 +153,6 @@ wss.on('connection', (ws) => {
             };
           }
           
-          // Gửi thông tin phòng cập nhật kèm số dư cho tất cả mọi người
           const roomPlayersWithBalance = joinedRoom.playerInfos.map(p => ({
             ...p,
             balance: persistentPlayers[p.id]?.balance || 1000000
@@ -165,12 +163,12 @@ wss.on('connection', (ws) => {
             payload: { players: roomPlayersWithBalance, roomId: joinedRoom.id }
           });
 
-          if (!joinedRoom.game) {
-             joinedRoom.game = new GameInstance([], 10000);
+          // LUÔN khởi tạo hoặc cập nhật GameInstance với danh sách lobby mới
+          if (!joinedRoom.game || joinedRoom.game.gamePhase !== 'playing') {
+             joinedRoom.game = new GameInstance(roomPlayersWithBalance, joinedRoom.game?.bet || 10000);
              if (globalHistory[joinedRoom.id]) joinedRoom.game.setHistory(globalHistory[joinedRoom.id]);
           }
 
-          // Broadcast trạng thái game cho tất cả để cập nhật danh sách lobby
           broadcastGameState(joinedRoom);
           break;
 
@@ -221,7 +219,6 @@ wss.on('connection', (ws) => {
               if (prevPhase === 'playing' && room.game.gamePhase === 'finished') {
                 updateGlobalStats(room);
                 
-                // Gửi các sự kiện đặc biệt cho client
                 const lastGame = room.game.history[0];
                 lastGame.events.forEach(ev => {
                    let specialType = 'info';
@@ -309,7 +306,13 @@ wss.on('connection', (ws) => {
         type: 'ROOM_UPDATE',
         payload: { players: roomPlayersWithBalance, roomId: room.id }
       });
-      if (room.game) broadcastGameState(room);
+      
+      // Đồng bộ GameInstance khi có người thoát
+      if (room.game && room.game.gamePhase !== 'playing') {
+        room.game = new GameInstance(roomPlayersWithBalance, room.game.bet);
+      }
+      
+      broadcastGameState(room);
     }
   });
 });
@@ -345,4 +348,3 @@ app.get('*', (req, res) => {
     else res.status(404).send('Vui lòng chạy build.');
   }
 });
-

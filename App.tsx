@@ -488,14 +488,16 @@ const App: React.FC = () => {
   };
 
   const orderedPlayers = useMemo(() => {
-    // SỬA LỖI: Ưu tiên danh sách từ roomInfo nếu trong game đang rỗng (chưa bắt đầu)
+    // SỬA LỖI: Ưu tiên roomInfo nếu gameState rỗng hoặc chưa có người chơi
     const playersInGame = gameState?.players || [];
     const playersInRoom = roomInfo?.players || [];
     
     let basePlayers = (playersInGame.length > 0) ? playersInGame : playersInRoom;
     
+    // Nếu cả 2 đều rỗng, trả về mảng rỗng
     if (basePlayers.length === 0) return [];
     
+    // Tìm vị trí của "tôi" để sắp xếp xoay vòng bàn chơi
     const myIndex = basePlayers.findIndex((p: any) => p.id === myId);
     if (myIndex === -1) return basePlayers;
     return [...basePlayers.slice(myIndex), ...basePlayers.slice(0, myIndex)];
@@ -521,7 +523,8 @@ const App: React.FC = () => {
   const handleStartGame = async () => {
     await unlockAudio();
     playSfx('click');
-    if ((roomInfo?.players?.length || 0) < 2) {
+    const playerNum = roomInfo?.players?.length || 0;
+    if (playerNum < 2) {
       setSpecialEventQueue(prev => [...prev, { id: 'error-'+Date.now(), type: 'info', playerName: 'CẦN ÍT NHẤT 2 NGƯỜI' }]);
       return;
     }
@@ -562,7 +565,7 @@ const App: React.FC = () => {
       <div className={`flex-1 relative ${isLandscape ? 'landscape-scale' : ''}`}>
          <div className="absolute inset-0 z-[50] pointer-events-none">
            {orderedPlayers.slice(1).map((p: any) => (
-             <div key={p.id} className="absolute text-center group pointer-events-auto avatar-landscape" style={{ left: playerPositions[p.id].x, top: playerPositions[p.id].y, transform: 'translate(-50%, -50%)' }}>
+             <div key={p.id} className="absolute text-center group pointer-events-auto avatar-landscape" style={{ left: playerPositions[p.id]?.x, top: playerPositions[p.id]?.y, transform: 'translate(-50%, -50%)' }}>
                 <PlayerAvatar player={p} isTurn={gameState?.players && gameState.players[gameState.currentTurn]?.id === p.id} onTroll={(type) => ws?.send(JSON.stringify({ type: 'SEND_TROLL', payload: { type, toId: p.id } }))} />
              </div>
            ))}
