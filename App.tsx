@@ -663,9 +663,12 @@ const App: React.FC = () => {
                  const handSize = me?.hand?.length || 0;
                  const isMobile = window.innerWidth < 768;
                  // Động hóa độ chồng lấn: Càng nhiều bài thì -maxOverlap, càng ít bài thì giãn ra
-                 const maxOverlap = isMobile ? 48 : 85;
-                 const overlap = handSize > 5 ? maxOverlap : (maxOverlap * 0.4);
-                 const style = idx > 0 ? { marginLeft: `-${overlap}px` } : {};
+                 const maxOverlap = isMobile ? 38 : 65; 
+                 const overlap = handSize > 1 ? maxOverlap : 0;
+                 const style: React.CSSProperties = { 
+                   zIndex: handSize - idx,
+                   marginLeft: idx > 0 ? `-${overlap}px` : '0px'
+                 };
                  
                  return (
                    <CardComponent 
