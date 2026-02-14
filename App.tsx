@@ -144,7 +144,7 @@ const HistoryModal: React.FC<{ history: GameHistory[], onClose: () => void }> = 
   }, [history]);
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[500] bg-black/90 flex items-center justify-center p-4 backdrop-blur-md">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[600] bg-black/90 flex items-center justify-center p-4 backdrop-blur-md">
       <motion.div initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} className="bg-slate-900 border border-slate-800 w-full max-w-4xl rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[85dvh]">
         <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-950/50">
           <div>
@@ -197,7 +197,7 @@ const HistoryModal: React.FC<{ history: GameHistory[], onClose: () => void }> = 
   );
 };
 
-const SettingsModal: React.FC<{ currentBet: number, onUpdate: (bet: number) => void, onClose: () => void }> = ({ currentBet, onUpdate, onClose }) => {
+const SettingsModal: React.FC<{ currentBet: number, onUpdate: (bet: number) => void, onClose: () => void, onOpenHistory: () => void }> = ({ currentBet, onUpdate, onClose, onOpenHistory }) => {
   const [bet, setBet] = useState(currentBet);
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[500] bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm">
@@ -215,8 +215,11 @@ const SettingsModal: React.FC<{ currentBet: number, onUpdate: (bet: number) => v
               ))}
             </div>
           </div>
-          <div className="pt-4 space-y-2">
+          <div className="pt-4 space-y-3">
             <button onClick={() => { playSfx('click'); onUpdate(bet); onClose(); }} className="w-full bg-emerald-600 hover:bg-emerald-500 py-4 rounded-xl font-black text-white shadow-xl transition-all active:scale-95 uppercase text-xs tracking-widest">Lưu Thay Đổi</button>
+            <button onClick={() => { playSfx('click'); onOpenHistory(); }} className="w-full bg-slate-800 hover:bg-slate-700 py-3 rounded-xl font-black text-white transition-all active:scale-95 uppercase text-[10px] tracking-widest flex items-center justify-center gap-2">
+               <span>📊</span> Xem Lịch Sử Ván Đấu
+            </button>
             <button onClick={() => { playSfx('click'); onClose(); }} className="w-full py-2 text-slate-500 text-[10px] font-black uppercase tracking-widest">Đóng</button>
           </div>
         </div>
@@ -433,15 +436,6 @@ const App: React.FC = () => {
     }
   }, [ws, name, myId]);
 
-  const copyInviteLink = async () => {
-    await unlockAudio();
-    const url = new URL(window.location.href);
-    url.searchParams.set('room', roomInfo?.roomId || '');
-    navigator.clipboard.writeText(url.toString());
-    playSfx('click');
-    setSpecialEventQueue(prev => [...prev, { id: 'invite-copy-'+Date.now(), type: 'info', playerName: 'LINK MỜI ĐÃ COPY' }]);
-  };
-
   const handlePlayCards = async () => {
     if (selectedCards.length === 0) return;
     await unlockAudio();
@@ -509,12 +503,6 @@ const App: React.FC = () => {
       <TrollModule activeTrolls={activeTrolls} playerPositions={playerPositions} />
 
       <div className="absolute top-4 right-4 flex gap-2 z-[200]">
-        <button onClick={copyInviteLink} className="bg-slate-900/80 border border-white/10 p-3 rounded-2xl flex items-center gap-2 hover:bg-slate-800 transition-all active:scale-95 shadow-xl backdrop-blur-md">
-          <span className="text-sm">🔗</span><span className="text-[10px] font-black text-white uppercase hidden md:inline">Mời bạn</span>
-        </button>
-        <button onClick={async () => { await unlockAudio(); playSfx('click'); setShowHistory(true); }} className="bg-slate-900/80 border border-white/10 p-3 rounded-2xl flex items-center gap-2 hover:bg-slate-800 transition-all active:scale-95 shadow-xl backdrop-blur-md">
-          <span className="text-sm">📊</span><span className="text-[10px] font-black text-white uppercase hidden md:inline">Lịch sử</span>
-        </button>
         <button onClick={async () => { await unlockAudio(); playSfx('click'); setShowSettings(true); }} className="bg-slate-900/80 border border-white/10 p-3 rounded-2xl flex items-center gap-2 hover:bg-slate-800 transition-all active:scale-95 shadow-xl backdrop-blur-md">
           <span className="text-sm">⚙️</span><span className="text-[10px] font-black text-white uppercase hidden md:inline">Cài đặt</span>
         </button>
@@ -592,7 +580,8 @@ const App: React.FC = () => {
             </motion.div>
           )}
 
-          <div className="max-w-full mx-auto flex gap-2 md:gap-3 justify-start md:justify-center overflow-x-auto scrollbar-hide py-3 px-10">
+          {/* Player hand with overlapping cards - right overlaps 1/3 of left */}
+          <div className="max-w-full mx-auto flex -space-x-6 md:-space-x-10 justify-center overflow-x-auto scrollbar-hide py-3 px-10">
              <AnimatePresence>
                {me?.hand?.map((c: any, idx: number) => (
                  <CardComponent key={c.id || idx} card={c} isDealing={dealingCards} index={idx} isSelected={selectedCards.includes(c?.id)} onClick={() => setSelectedCards(prev => prev.includes(c.id) ? prev.filter(id => id !== c.id) : [...prev, c.id])} />
@@ -614,7 +603,7 @@ const App: React.FC = () => {
       
       <AnimatePresence>
         {showHistory && <HistoryModal history={gameState?.history || []} onClose={() => setShowHistory(false)} />}
-        {showSettings && <SettingsModal currentBet={gameState?.bet || 10000} onUpdate={(bet) => ws?.send(JSON.stringify({ type: 'UPDATE_BET', payload: { bet } }))} onClose={() => setShowSettings(false)} />}
+        {showSettings && <SettingsModal currentBet={gameState?.bet || 10000} onUpdate={(bet) => ws?.send(JSON.stringify({ type: 'UPDATE_BET', payload: { bet } }))} onClose={() => setShowSettings(false)} onOpenHistory={() => { setShowSettings(false); setShowHistory(true); }} />}
       </AnimatePresence>
     </div>
   );
@@ -655,10 +644,10 @@ const PlayerAvatar: React.FC<{ player: any, isTurn: boolean, onTroll: (type: Tro
          <AnimatePresence>
            {showTrollPanel && (
              <motion.div 
-               initial={{ opacity: 0, scale: 0.5, y: 10 }}
+               initial={{ opacity: 0, scale: 0.5, y: -10 }}
                animate={{ opacity: 1, scale: 1, y: 0 }}
-               exit={{ opacity: 0, scale: 0.5, y: 10 }}
-               className="absolute -top-14 left-0 bg-slate-800/95 backdrop-blur-md border border-white/20 rounded-2xl p-2 flex gap-3 z-[300] shadow-2xl pointer-events-auto"
+               exit={{ opacity: 0, scale: 0.5, y: -10 }}
+               className="absolute top-full left-0 mt-2 bg-slate-800/95 backdrop-blur-md border border-white/20 rounded-2xl p-2 flex gap-3 z-[300] shadow-2xl pointer-events-auto"
              >
                 {(['stone', 'tomato', 'bomb', 'water', 'egg'] as TrollType[]).map(t => (
                   <motion.button 
