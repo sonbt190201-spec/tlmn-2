@@ -16,7 +16,7 @@ const playOverChopSoundSynth = () => {
   if (ctx.state === 'suspended') ctx.resume();
   
   const master = ctx.createGain();
-  master.gain.value = 1.0;
+  master.gain.value = 1.5; // TĂNG TỪ 1.0 LÊN 1.5
   master.connect(ctx.destination);
   const now = ctx.currentTime;
 
@@ -27,7 +27,7 @@ const playOverChopSoundSynth = () => {
     osc.frequency.setValueAtTime(freq, startTime);
     osc.frequency.exponentialRampToValueAtTime(40, startTime + 0.2);
     oscGain.gain.setValueAtTime(0, startTime);
-    oscGain.gain.linearRampToValueAtTime(1, startTime + 0.02);
+    oscGain.gain.linearRampToValueAtTime(1.2, startTime + 0.02);
     oscGain.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
     osc.connect(oscGain);
     oscGain.connect(master);
@@ -43,7 +43,7 @@ const playOverChopSoundSynth = () => {
   sub.type = 'sine';
   sub.frequency.setValueAtTime(45, now + 0.2);
   subGain.gain.setValueAtTime(0, now + 0.2);
-  subGain.gain.linearRampToValueAtTime(0.9, now + 0.3);
+  subGain.gain.linearRampToValueAtTime(1.0, now + 0.3);
   subGain.gain.exponentialRampToValueAtTime(0.01, now + 1.8);
   sub.connect(subGain);
   subGain.connect(master);
@@ -55,7 +55,7 @@ const playOverChopSoundSynth = () => {
   metal.type = 'sawtooth';
   metal.frequency.setValueAtTime(800, now + 0.25);
   metalGain.gain.setValueAtTime(0, now + 0.25);
-  metalGain.gain.linearRampToValueAtTime(0.3, now + 0.27);
+  metalGain.gain.linearRampToValueAtTime(0.4, now + 0.27);
   metalGain.gain.exponentialRampToValueAtTime(0.01, now + 0.6);
   metal.connect(metalGain);
   metalGain.connect(master);
