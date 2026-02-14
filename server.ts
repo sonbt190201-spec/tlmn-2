@@ -160,11 +160,11 @@ wss.on('connection', (ws) => {
             payload: { players: roomPlayersWithBalance, roomId: joinedRoom.id }
           });
 
-          // LUẬT RESET KHI CÓ NGƯỜI MỚI: Nếu game chưa bắt đầu, reset về isFirstGame = true để xét 3 Bích
+          // Reset luật 3 bích khi có người chơi mới join (đảm bảo tính công bằng)
           if (!joinedRoom.game || joinedRoom.game.gamePhase !== 'playing') {
              const currentBet = joinedRoom.game ? joinedRoom.game.bet : 10000;
              joinedRoom.game = new GameInstance(roomPlayersWithBalance, currentBet);
-             joinedRoom.game.isFirstGame = true; // Reset luật 3 Bích cho nhóm mới
+             joinedRoom.game.isFirstGame = true; // Thực thi luật 3 bích cho ván tiếp theo
              const history = globalHistory[joinedRoom.id] || [];
              if (typeof joinedRoom.game.setHistory === 'function') {
                 joinedRoom.game.setHistory(history);
@@ -336,7 +336,7 @@ wss.on('connection', (ws) => {
       });
       if (room.game && room.game.gamePhase !== 'playing') {
         room.game = new GameInstance(roomPlayersWithBalance, room.game.bet);
-        room.game.isFirstGame = true; // Reset luật 3 bích khi có người thoát/thay đổi phòng
+        room.game.isFirstGame = true; // Reset khi có biến động người chơi
       }
       broadcastGameState(room);
     }

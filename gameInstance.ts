@@ -1,3 +1,4 @@
+
 import { Card, Player, Move, HandType, GameHistory, PlayerHistoryEntry, PayoutResult, GameEventRecord } from './types.js';
 import { detectHandType, compareHands, sortCards, checkInstantWin } from './ruleValidator.js';
 import { dealCards } from './deckManager.js';
@@ -31,7 +32,7 @@ export class GameInstance {
   private lastPayouts: PayoutResult[] = [];
   private roundEvents: GameEventRecord[] = [];
   private lastWasInstantWin: boolean = false;
-  private isFirstMoveOfGame: boolean = false; // Theo dõi nước đi đầu tiên của ván 1
+  private isFirstMoveOfGame: boolean = false; // Theo dõi nước đi đầu tiên của ván để xét 3 Bích
   
   // Lưu vết chuỗi chặt trong vòng
   private chopChain: { attackerId: string, victimId: string, value: number }[] = [];
@@ -80,7 +81,7 @@ export class GameInstance {
     this.lastPayouts = [];
     this.chopChain = [];
     this.roundEvents = [];
-    this.isFirstMoveOfGame = this.isFirstGame; // Kích hoạt kiểm tra 3 Bích nếu là ván đầu
+    this.isFirstMoveOfGame = this.isFirstGame; 
 
     this.players.forEach(p => {
       const handData = hands.find(h => h.playerId === p.id);
@@ -108,7 +109,6 @@ export class GameInstance {
   }
 
   private handleInstantWin(winnerId: string, reason: string) {
-    // Fixed: Pass an array of player IDs (string[]) instead of Player objects to calculateTrangMoney.
     const payouts = MoneyEngine.calculateTrangMoney(winnerId, this.players.map(p => p.id), this.bet);
     payouts.forEach(pay => {
       const p = this.players.find(pl => pl.id === pay.playerId);
@@ -139,7 +139,7 @@ export class GameInstance {
     const cards = player.hand.filter(c => cardIds.includes(c.id));
     if (cards.length !== cardIds.length) return { error: "Bài không hợp lệ" };
 
-    // 1. LUẬT 3 BÍCH CHO VÁN ĐẦU TIÊN
+    // LUẬT 3 BÍCH CHO VÁN ĐẦU TIÊN
     if (this.isFirstMoveOfGame) {
       const hasThreeSpade = cards.some(c => c.rank === 3 && c.suit === 'spade');
       if (!hasThreeSpade) return { error: "Ván đầu tiên bắt buộc phải đánh lá 3 Bích (3♠)!" };
@@ -246,52 +246,57 @@ export class GameInstance {
     if (this.gamePhase !== "playing") return;
     const playerCount = this.players.length;
     let nextIdx = (this.currentTurn + 1) % playerCount;
-    let attempts = 0;
-
-    while (attempts < playerCount) {
+    
+    // Vòng chơi chỉ kết thúc khi quay lại đúng người đang giữ combo (lastMove.playerId)
+    // Sau khi tất cả những người ACTIVE khác đã bỏ lượt hoặc đã về.
+    for (let i = 0; i < playerCount; i++) {
       const p = this.players[nextIdx];
-      const isFinished = this.finishedPlayers.includes(p.id);
-      const hasPassed = this.passedPlayers.has(p.id);
-
-      // Nếu quay lại đúng người đang làm chủ combo -> Trick kết thúc, reset vòng
+      
+      // Nếu đã quay lại chủ combo -> Người đó thắng vòng này, được mở vòng mới
       if (this.lastMove && p.id === this.lastMove.playerId) {
         this.resetRound(p.id);
         return;
       }
 
+      const isFinished = this.finishedPlayers.includes(p.id);
+      const hasPassed = this.passedPlayers.has(p.id);
+
+      // Chỉ tìm những người chưa về (Active) và chưa bỏ lượt
       if (!isFinished && !hasPassed) {
         this.currentTurn = nextIdx;
         return;
       }
+      
       nextIdx = (nextIdx + 1) % playerCount;
-      attempts++;
     }
 
-    // Nếu không tìm được ai khác (tất cả đã bỏ lượt hoặc đã về), người chủ combo (dù đã về) vẫn thắng trick
-    const ownerId = this.lastMove?.playerId;
-    if (ownerId) {
-      this.resetRound(ownerId);
+    // Trường hợp dự phòng nếu trick owner đã về Nhất và tất cả mọi người còn lại bỏ lượt
+    if (this.lastMove) {
+      this.resetRound(this.lastMove.playerId);
     }
   }
 
-  private resetRound(leadPlayerId: string) {
+  private resetRound(winnerId: string) {
     this.resolveChopChain();
     this.lastMove = null;
     this.passedPlayers.clear();
     
-    // Tìm người tiếp theo sau leadPlayerId để trao quyền lead nếu leadPlayerId đã FINISHED
-    let idx = this.players.findIndex(p => p.id === leadPlayerId);
-    if (this.finishedPlayers.includes(leadPlayerId)) {
+    let leadIdx = this.players.findIndex(p => p.id === winnerId);
+    
+    // Nếu người thắng vòng chơi đã về (Finished), quyền khai gậy (Lead) 
+    // thuộc về người chơi ACTIVE kế tiếp theo vòng.
+    if (this.finishedPlayers.includes(winnerId)) {
       const playerCount = this.players.length;
-      for (let i = 1; i < playerCount; i++) {
-        const next = (idx + i) % playerCount;
-        if (!this.finishedPlayers.includes(this.players[next].id)) {
-          idx = next;
+      let nextIdx = (leadIdx + 1) % playerCount;
+      for (let i = 0; i < playerCount; i++) {
+        if (!this.finishedPlayers.includes(this.players[nextIdx].id)) {
+          leadIdx = nextIdx;
           break;
         }
+        nextIdx = (nextIdx + 1) % playerCount;
       }
     }
-    this.currentTurn = idx;
+    this.currentTurn = leadIdx;
   }
 
   private handlePlayerFinish(player: Player) {
@@ -299,8 +304,8 @@ export class GameInstance {
     this.finishedPlayers.push(player.id);
     player.finishedRank = this.finishedPlayers.length;
 
-    // KHÔNG resetRound ngay khi người chơi về Nhất. 
-    // Trick vẫn tiếp tục cho đến khi mọi người còn lại bỏ lượt.
+    // Quan trọng: KHÔNG reset combo trên bàn.
+    // Những người chơi ACTIVE khác vẫn có quyền chặn lá cuối của người vừa về.
 
     if (player.finishedRank === 1) {
       this.players.forEach(p => {
