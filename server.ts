@@ -23,7 +23,6 @@ const HISTORY_FILE = path.join(DATA_DIR, 'history.json');
 
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
 
-// Cấu trúc lưu trữ người chơi mở rộng
 interface PersistentPlayer {
   id: string;
   name: string;
@@ -34,7 +33,6 @@ interface PersistentPlayer {
 let persistentPlayers: Record<string, PersistentPlayer> = {};
 let globalHistory: Record<string, GameHistory[]> = {};
 
-// Load dữ liệu khi khởi động
 function loadData() {
   try {
     if (fs.existsSync(BALANCES_FILE)) {
@@ -163,10 +161,13 @@ wss.on('connection', (ws) => {
             payload: { players: roomPlayersWithBalance, roomId: joinedRoom.id }
           });
 
-          // LUÔN khởi tạo hoặc cập nhật GameInstance với danh sách lobby mới
+          // Khởi tạo GameInstance nếu chưa có hoặc game đã kết thúc
           if (!joinedRoom.game || joinedRoom.game.gamePhase !== 'playing') {
              joinedRoom.game = new GameInstance(roomPlayersWithBalance, joinedRoom.game?.bet || 10000);
-             if (globalHistory[joinedRoom.id]) joinedRoom.game.setHistory(globalHistory[joinedRoom.id]);
+             const history = globalHistory[joinedRoom.id] || [];
+             if (typeof joinedRoom.game.setHistory === 'function') {
+                joinedRoom.game.setHistory(history);
+             }
           }
 
           broadcastGameState(joinedRoom);
@@ -174,31 +175,40 @@ wss.on('connection', (ws) => {
 
         case 'START_GAME':
           if (room && (!room.game || room.game.gamePhase !== 'playing')) {
-            const playersData = room.playerInfos.slice(0, 4).map(p => ({
-              id: p.id,
-              name: p.name,
-              balance: persistentPlayers[p.id]?.balance || 1000000
-            }));
-
-            if (playersData.length < 2) {
-              ws.send(JSON.stringify({ type: 'ERROR', payload: "Cần ít nhất 2 người chơi để bắt đầu!" }));
-              return;
-            }
-
-            const currentBet = room.game ? room.game.bet : 10000;
-            const prevHistory = room.game ? room.game.history : (globalHistory[room.id] || []);
-            const prevInternal = room.game ? room.game.getInternalState() : null;
-            
-            room.game = new GameInstance(playersData, currentBet);
-            room.game.setHistory(prevHistory);
-            if (prevInternal) room.game.setPersistentState(prevInternal);
-            
             try {
+              const playersData = room.playerInfos.slice(0, 4).map(p => ({
+                id: p.id,
+                name: p.name,
+                balance: persistentPlayers[p.id]?.balance || 1000000
+              }));
+
+              if (playersData.length < 2) {
+                ws.send(JSON.stringify({ type: 'ERROR', payload: "Cần ít nhất 2 người chơi để bắt đầu!" }));
+                return;
+              }
+
+              const currentBet = room.game ? room.game.bet : 10000;
+              const prevHistory = room.game ? room.game.history : (globalHistory[room.id] || []);
+              const prevInternal = room.game ? room.game.getInternalState() : null;
+              
+              const newGame = new GameInstance(playersData, currentBet);
+              
+              if (typeof newGame.setHistory === 'function') {
+                newGame.setHistory(prevHistory);
+              }
+              
+              if (prevInternal && typeof newGame.setPersistentState === 'function') {
+                newGame.setPersistentState(prevInternal);
+              }
+
+              room.game = newGame;
               room.game.startNewRound();
+              
               if (room.game.gamePhase === 'finished') updateGlobalStats(room);
               broadcastGameState(room);
             } catch (err: any) {
-              ws.send(JSON.stringify({ type: 'ERROR', payload: err.message }));
+              console.error("Lỗi Start Game:", err);
+              ws.send(JSON.stringify({ type: 'ERROR', payload: err.message || "Lỗi khởi tạo game" }));
             }
           }
           break;
@@ -218,20 +228,21 @@ wss.on('connection', (ws) => {
             if (!error) {
               if (prevPhase === 'playing' && room.game.gamePhase === 'finished') {
                 updateGlobalStats(room);
-                
                 const lastGame = room.game.history[0];
-                lastGame.events.forEach(ev => {
-                   let specialType = 'info';
-                   if (ev.type === 'CHOP') specialType = 'chat_heo';
-                   else if (ev.type === 'OVER_CHOP') specialType = 'chat_chong';
-                   else if (ev.type === 'THOI') specialType = 'thui_heo';
-                   else if (ev.type === 'CONG') specialType = 'chay_bai';
-                   
-                   broadcast(room, {
-                     type: 'SPECIAL_EVENT',
-                     payload: { type: specialType, playerName: ev.playerName, chopType: 'three_pairs' }
-                   });
-                });
+                if (lastGame) {
+                  lastGame.events.forEach(ev => {
+                    let specialType = 'info';
+                    if (ev.type === 'CHOP') specialType = 'chat_heo';
+                    else if (ev.type === 'OVER_CHOP') specialType = 'chat_chong';
+                    else if (ev.type === 'THOI') specialType = 'thui_heo';
+                    else if (ev.type === 'CONG') specialType = 'chay_bai';
+                    
+                    broadcast(room, {
+                      type: 'SPECIAL_EVENT',
+                      payload: { type: specialType, playerName: ev.playerName, chopType: 'three_pairs' }
+                    });
+                  });
+                }
               }
               broadcastGameState(room);
             } else {
@@ -290,7 +301,7 @@ wss.on('connection', (ws) => {
           break;
       }
     } catch (e) {
-      console.error("Lỗi xử lý tin nhắn:", e);
+      console.error("Lỗi xử lý tin nhắn tổng quát:", e);
     }
   });
 
@@ -307,7 +318,6 @@ wss.on('connection', (ws) => {
         payload: { players: roomPlayersWithBalance, roomId: room.id }
       });
       
-      // Đồng bộ GameInstance khi có người thoát
       if (room.game && room.game.gamePhase !== 'playing') {
         room.game = new GameInstance(roomPlayersWithBalance, room.game.bet);
       }
