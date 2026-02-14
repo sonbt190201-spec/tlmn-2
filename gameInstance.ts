@@ -32,9 +32,8 @@ export class GameInstance {
   private lastPayouts: PayoutResult[] = [];
   private roundEvents: GameEventRecord[] = [];
   private lastWasInstantWin: boolean = false;
-  private isFirstMoveOfGame: boolean = false; // Theo dõi nước đi đầu tiên của ván để xét 3 Bích
+  private isFirstMoveOfGame: boolean = false; 
   
-  // Lưu vết chuỗi chặt trong vòng
   private chopChain: { attackerId: string, victimId: string, value: number }[] = [];
 
   constructor(playerData: { id: string, name: string, balance: number }[], initialBet: number) {
@@ -139,7 +138,6 @@ export class GameInstance {
     const cards = player.hand.filter(c => cardIds.includes(c.id));
     if (cards.length !== cardIds.length) return { error: "Bài không hợp lệ" };
 
-    // LUẬT 3 BÍCH CHO VÁN ĐẦU TIÊN
     if (this.isFirstMoveOfGame) {
       const hasThreeSpade = cards.some(c => c.rank === 3 && c.suit === 'spade');
       if (!hasThreeSpade) return { error: "Ván đầu tiên bắt buộc phải đánh lá 3 Bích (3♠)!" };
@@ -151,6 +149,7 @@ export class GameInstance {
     const isFourPairs = handType === HandType.FOUR_CONSECUTIVE_PAIRS;
     const isFreeChop = isFourPairs && this.lastMove && compareHands(cards, this.lastMove.cards) === 1;
 
+    // Kiểm tra lượt: Người chơi phải đúng lượt HOẶC đang chặt tự do (4 đôi thông)
     if (this.players[this.currentTurn].id !== playerId && !isFreeChop) {
       return { error: "Chưa tới lượt" };
     }
@@ -160,7 +159,7 @@ export class GameInstance {
     }
 
     if (this.lastMove) {
-      if (compareHands(cards, this.lastMove.cards) !== 1) return { error: "Bộ bài không đủ mạnh" };
+      if (compareHands(cards, this.lastMove.cards) !== 1) return { error: "Bộ bài không đủ mạnh để chặn" };
       
       const isAttackerHang = [HandType.THREE_CONSECUTIVE_PAIRS, HandType.FOUR_OF_A_KIND, HandType.FOUR_CONSECUTIVE_PAIRS].includes(handType);
       const isVictimHeo = this.lastMove.cards.some(c => c.rank === 15);
@@ -188,12 +187,14 @@ export class GameInstance {
         player.hand = player.hand.filter(c => !cardIds.includes(c.id));
         player.hasPlayedAnyCard = true;
         
-        this.lastMove = null;
+        // Reset trạng thái bỏ lượt vì có chặt
         this.passedPlayers.clear();
+        this.lastMove = { type: handType, cards, playerId, timestamp: Date.now() };
         this.currentTurn = this.players.findIndex(p => p.id === playerId);
         this.isFirstMoveOfGame = false;
         
         if (player.hand.length === 0) this.handlePlayerFinish(player);
+        else this.moveToNextPlayer();
         
         let visualChopType: any = "three_pairs";
         if (handType === HandType.FOUR_OF_A_KIND) visualChopType = "four_of_a_kind";
@@ -244,36 +245,45 @@ export class GameInstance {
 
   private moveToNextPlayer() {
     if (this.gamePhase !== "playing") return;
+
+    // LUẬT CỐT LÕI: Kiểm tra xem vòng chơi đã kết thúc chưa.
+    // Vòng kết thúc khi TẤT CẢ người chơi ACTIVE (ngoại trừ người đang giữ bài cao nhất) đã bỏ lượt.
+    const activePlayers = this.players.filter(p => !this.finishedPlayers.includes(p.id));
+    const ownerId = this.lastMove?.playerId;
+    
+    // Đối thủ ACTIVE là những người chưa về bài và không phải người đánh lá bài hiện tại
+    const activeOpponents = activePlayers.filter(p => p.id !== ownerId);
+    const allOpponentsPassed = activeOpponents.every(p => this.passedPlayers.has(p.id));
+
+    if (allOpponentsPassed && ownerId) {
+      this.resetRound(ownerId);
+      return;
+    }
+
+    // Nếu vòng chưa kết thúc, tìm người chơi ACTIVE tiếp theo chưa bỏ lượt
     const playerCount = this.players.length;
     let nextIdx = (this.currentTurn + 1) % playerCount;
-    
-    // Vòng chơi chỉ kết thúc khi quay lại đúng người đang giữ combo (lastMove.playerId)
-    // Sau khi tất cả những người ACTIVE khác đã bỏ lượt hoặc đã về.
+
     for (let i = 0; i < playerCount; i++) {
       const p = this.players[nextIdx];
-      
-      // Nếu đã quay lại chủ combo -> Người đó thắng vòng này, được mở vòng mới
-      if (this.lastMove && p.id === this.lastMove.playerId) {
-        this.resetRound(p.id);
-        return;
-      }
-
       const isFinished = this.finishedPlayers.includes(p.id);
       const hasPassed = this.passedPlayers.has(p.id);
 
-      // Chỉ tìm những người chưa về (Active) và chưa bỏ lượt
+      // Nếu đã quay lại chính chủ bài mà vòng chưa reset (do lỗi logic nào đó) -> Reset
+      if (ownerId && p.id === ownerId) {
+        this.resetRound(ownerId);
+        return;
+      }
+
       if (!isFinished && !hasPassed) {
         this.currentTurn = nextIdx;
         return;
       }
-      
       nextIdx = (nextIdx + 1) % playerCount;
     }
 
-    // Trường hợp dự phòng nếu trick owner đã về Nhất và tất cả mọi người còn lại bỏ lượt
-    if (this.lastMove) {
-      this.resetRound(this.lastMove.playerId);
-    }
+    // Trường hợp xấu nhất nếu không tìm thấy ai, reset về chủ bài
+    if (ownerId) this.resetRound(ownerId);
   }
 
   private resetRound(winnerId: string) {
@@ -283,8 +293,8 @@ export class GameInstance {
     
     let leadIdx = this.players.findIndex(p => p.id === winnerId);
     
-    // Nếu người thắng vòng chơi đã về (Finished), quyền khai gậy (Lead) 
-    // thuộc về người chơi ACTIVE kế tiếp theo vòng.
+    // Nếu người thắng vòng chơi đã về (FINISHED), quyền đánh vòng mới (LEAD)
+    // sẽ thuộc về người chơi ACTIVE kế tiếp theo vòng tròn.
     if (this.finishedPlayers.includes(winnerId)) {
       const playerCount = this.players.length;
       let nextIdx = (leadIdx + 1) % playerCount;
@@ -296,6 +306,7 @@ export class GameInstance {
         nextIdx = (nextIdx + 1) % playerCount;
       }
     }
+    
     this.currentTurn = leadIdx;
   }
 
@@ -304,8 +315,7 @@ export class GameInstance {
     this.finishedPlayers.push(player.id);
     player.finishedRank = this.finishedPlayers.length;
 
-    // Quan trọng: KHÔNG reset combo trên bàn.
-    // Những người chơi ACTIVE khác vẫn có quyền chặn lá cuối của người vừa về.
+    // KHÔNG reset lastMove ở đây. Lá bài cuối vẫn có thể bị chặn bởi những người ACTIVE khác.
 
     if (player.finishedRank === 1) {
       this.players.forEach(p => {
@@ -318,6 +328,7 @@ export class GameInstance {
 
     const remainingCount = this.players.filter(p => !this.finishedPlayers.includes(p.id)).length;
     if (remainingCount <= 1) {
+      // Kết thúc ván nếu chỉ còn 1 hoặc 0 người chơi
       this.players.forEach(p => { 
         if(!this.finishedPlayers.includes(p.id)) { 
           this.finishedPlayers.push(p.id); 
