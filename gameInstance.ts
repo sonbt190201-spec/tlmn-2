@@ -154,13 +154,10 @@ export class GameInstance {
     const player = this.players.find(p => p.id === playerId);
     if (!player) return "Người chơi không tồn tại";
     
-    // Tìm các lá bài trong tay người chơi dựa trên ID client gửi lên
     const cards = player.hand.filter(c => cardIds.includes(c.id));
     if (cards.length === 0 || cards.length !== cardIds.length) return "Lá bài không hợp lệ trong tay";
 
     const handType = detectHandType(cards);
-    
-    // Kiểm tra chặn tự do (4 đôi thông)
     const isFreeChop = (handType === HandType.FOUR_CONSECUTIVE_PAIRS);
 
     if (this.players[this.currentTurn].id !== playerId && !isFreeChop) {
@@ -173,7 +170,6 @@ export class GameInstance {
 
     if (handType === HandType.INVALID) return "Bộ bài không hợp lệ";
 
-    // Kiểm tra ván đầu phải đánh 3 bích
     if (this.mustContainStarter && this.lastMove === null) {
       const containsLowest = cards.some(c => c.id === this.lowestCardIdInFirstGame);
       if (!containsLowest && (this.isFirstGame || this.lastWasInstantWin)) {
@@ -206,17 +202,17 @@ export class GameInstance {
       }
     }
 
-    // Thực hiện đánh bài
     player.hand = player.hand.filter(c => !cardIds.includes(c.id));
     player.hasPlayedAnyCard = true;
     this.lastMove = { type: handType, cards, playerId, timestamp: Date.now(), isChop, isOverChop };
     this.mustContainStarter = false;
 
+    const pIdx = this.players.findIndex(p => p.id === playerId);
+    this.currentTurn = pIdx;
+
     if (player.hand.length === 0) {
       this.onPlayerFinished(player);
     } else {
-      const pIdx = this.players.findIndex(p => p.id === playerId);
-      this.currentTurn = pIdx;
       this.nextTurn(); 
     }
     return null;
@@ -280,41 +276,75 @@ export class GameInstance {
 
   nextTurn() {
     if (this.gamePhase !== "playing") return;
-    const playerCount = this.players.length;
-    let nextIdx = (this.currentTurn + 1) % playerCount;
-    let attempts = 0;
 
-    while (attempts < playerCount * 2) {
-      const nextPlayer = this.players[nextIdx];
+    // 1. Kiểm tra reset vòng (trick)
+    if (this.lastMove) {
+      // Những người chơi còn khả năng đánh trong vòng này:
+      // Không bị cháy (burned), không đã về (finished), không đã bỏ lượt (passed)
+      const activeInTrick = this.players.filter(p => 
+        !this.finishedPlayers.includes(p.id) && 
+        !p.isBurned && 
+        !this.passedPlayers.has(p.id)
+      );
 
-      if (this.lastMove && nextPlayer.id === this.lastMove.playerId) {
+      const ownerId = this.lastMove.playerId;
+      const isOwnerFinished = this.finishedPlayers.includes(ownerId);
+      
+      // Hết vòng khi:
+      // A. Mọi người khác đã bỏ lượt (chỉ còn duy nhất chủ vòng trong danh sách active)
+      const everyoneElsePassed = activeInTrick.length === 1 && activeInTrick[0].id === ownerId;
+      // B. Chủ vòng đã về và không còn ai khác chưa bỏ lượt
+      const ownerFinishedAndNoOneLeft = isOwnerFinished && activeInTrick.length === 0;
+
+      if (everyoneElsePassed || ownerFinishedAndNoOneLeft) {
         this.resolveChopChain();
         this.lastMove = null;
         this.passedPlayers.clear();
 
-        if (!this.finishedPlayers.includes(nextPlayer.id)) {
+        // Nếu chủ vòng chưa về, lượt tiếp tục là họ để đánh tự do
+        if (!isOwnerFinished) {
+          const ownerIdx = this.players.findIndex(p => p.id === ownerId);
+          if (ownerIdx !== -1) {
+            this.currentTurn = ownerIdx;
+            return;
+          }
+        }
+        // Nếu chủ vòng đã về, lượt sẽ được tìm tiếp cho người chưa về gần nhất ở logic phía dưới
+      }
+    }
+
+    // 2. Tìm người chơi tiếp theo
+    const playerCount = this.players.length;
+    let nextIdx = (this.currentTurn + 1) % playerCount;
+    let attempts = 0;
+
+    while (attempts < playerCount) {
+      const nextPlayer = this.players[nextIdx];
+      const isFinished = this.finishedPlayers.includes(nextPlayer.id);
+      const isBurned = nextPlayer.isBurned;
+      const hasPassed = this.passedPlayers.has(nextPlayer.id);
+
+      // Nếu không còn lastMove (vừa reset vòng), chỉ cần người chưa finished và chưa burned
+      if (!this.lastMove) {
+        if (!isFinished && !isBurned) {
           this.currentTurn = nextIdx;
           return;
-        } else {
-          let searchIdx = (nextIdx + 1) % playerCount;
-          let sAttempts = 0;
-          while (sAttempts < playerCount) {
-            if (!this.finishedPlayers.includes(this.players[searchIdx].id) && !this.players[searchIdx].isBurned) {
-              this.currentTurn = searchIdx;
-              return;
-            }
-            searchIdx = (searchIdx + 1) % playerCount;
-            sAttempts++;
-          }
+        }
+      } else {
+        // Nếu vòng đang diễn ra, phải là người chưa finished, chưa burned và CHƯA PASS
+        if (!isFinished && !isBurned && !hasPassed) {
+          this.currentTurn = nextIdx;
+          return;
         }
       }
 
-      if (!this.finishedPlayers.includes(nextPlayer.id) && !this.passedPlayers.has(nextPlayer.id) && !nextPlayer.isBurned) {
-        this.currentTurn = nextIdx;
-        return;
-      }
       nextIdx = (nextIdx + 1) % playerCount;
       attempts++;
+    }
+
+    // 3. Nếu không tìm thấy ai (vô lý trong phase playing), kiểm tra kết thúc ván
+    if (this.players.filter(p => !this.finishedPlayers.includes(p.id)).length <= 1) {
+      this.endRound();
     }
   }
 
@@ -347,8 +377,7 @@ export class GameInstance {
       });
       this.endRound();
     } else {
-      const pIdx = this.players.findIndex(p => p.id === player.id);
-      this.currentTurn = pIdx;
+      // Giữ nguyên currentTurn là người vừa đánh (để nextTurn biết ai là trick owner)
       this.nextTurn();
     }
   }
