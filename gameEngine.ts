@@ -192,11 +192,13 @@ export class GameEngine {
       };
     });
 
+    // Added missing 'events' property to satisfy the GameHistory interface requirement.
     const historyItem: GameHistory = {
       roundId: Math.random().toString(36).substr(2, 5),
       timestamp: Date.now(),
       bet: this.bet,
-      players: playersHistory
+      players: playersHistory,
+      events: []
     };
 
     this.history.push(historyItem);

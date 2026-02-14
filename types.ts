@@ -46,7 +46,6 @@ export interface PayoutResult {
   reason?: string;
 }
 
-// Added MoneyTransaction interface to fix error in gameEngine.ts
 export interface MoneyTransaction {
   id: string;
   type: MoneyChangeType;
@@ -54,15 +53,29 @@ export interface MoneyTransaction {
   reason: string;
   timestamp: number;
   sourcePlayerId?: string;
+  targetPlayerId?: string;
 }
 
 export interface GameEventRecord {
-  type: string;
+  type: 'CHOP' | 'OVER_CHOP' | 'THOI' | 'CONG' | 'INSTANT_WIN' | 'RANK' | 'THREE_SPADE_WIN';
   fromPlayerId?: string;
   toPlayerId?: string;
   playerName?: string;
+  targetName?: string;
   amount?: number;
   description: string;
+  timestamp: number;
+}
+
+export interface GlobalPlayerStats {
+  totalRounds: number;
+  totalWin: number;
+  totalLose: number;
+  totalMoneyWin: number;
+  totalMoneyLose: number;
+  totalHeoCut: number;
+  totalHeoBurn: number;
+  totalCongCount: number;
 }
 
 export interface PlayerHistoryEntry {
@@ -73,7 +86,7 @@ export interface PlayerHistoryEntry {
   balanceAfter: number;
   change: number;
   isBurned: boolean;
-  transactions?: {
+  transactions: {
     reason: string;
     amount: number;
     type: string;
@@ -85,9 +98,10 @@ export interface GameHistory {
   timestamp: number;
   bet: number;
   players: PlayerHistoryEntry[];
-  events?: GameEventRecord[];
+  events: GameEventRecord[];
 }
 
+// Added missing types for Chat and Troll features
 export interface ChatMessage {
   id: string;
   playerId: string;
@@ -96,7 +110,7 @@ export interface ChatMessage {
   timestamp: number;
 }
 
-export type TrollType = "stone" | "tomato" | "bomb" | "water" | "egg";
+export type TrollType = 'stone' | 'tomato' | 'bomb' | 'water' | 'egg';
 
 export interface TrollAction {
   id: string;

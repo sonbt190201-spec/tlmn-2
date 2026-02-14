@@ -1,9 +1,10 @@
+
 import express from 'express';
 import { WebSocketServer, WebSocket } from 'ws';
 import { RoomManager, Room } from './roomManager.js';
 import { GameInstance } from './gameInstance.js';
 import { MoneyEngine } from './moneyEngine.js';
-import { HandType } from './types.js';
+import { HandType, GlobalPlayerStats, GameHistory } from './types.js';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -15,32 +16,116 @@ const app = express();
 const port = process.env.PORT || 3000;
 const roomManager = new RoomManager();
 
-const persistentBalances: Record<string, Record<string, number>> = {};
+// Tệp lưu trữ bền vững
+const DATA_DIR = path.join(__dirname, 'data');
+const BALANCES_FILE = path.join(DATA_DIR, 'balances.json');
+const HISTORY_FILE = path.join(DATA_DIR, 'history.json');
 
-// --- FIX MÀN HÌNH ĐEN PRODUCTION ---
-// 1. Xác định đường dẫn thư mục build (dist)
+if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR);
+
+// Cấu trúc lưu trữ người chơi mở rộng
+interface PersistentPlayer {
+  id: string;
+  name: string;
+  balance: number;
+  stats: GlobalPlayerStats;
+}
+
+let persistentPlayers: Record<string, PersistentPlayer> = {};
+let globalHistory: Record<string, GameHistory[]> = {};
+
+// Load dữ liệu khi khởi động
+function loadData() {
+  try {
+    if (fs.existsSync(BALANCES_FILE)) {
+      persistentPlayers = JSON.parse(fs.readFileSync(BALANCES_FILE, 'utf-8'));
+    }
+    if (fs.existsSync(HISTORY_FILE)) {
+      globalHistory = JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf-8'));
+    }
+  } catch (err) {
+    console.error("Lỗi load data:", err);
+  }
+}
+
+function saveData() {
+  try {
+    fs.writeFileSync(BALANCES_FILE, JSON.stringify(persistentPlayers, null, 2));
+    fs.writeFileSync(HISTORY_FILE, JSON.stringify(globalHistory, null, 2));
+  } catch (err) {
+    console.error("Lỗi save data:", err);
+  }
+}
+
+loadData();
+
 const distPath = path.resolve(__dirname, 'dist');
-
-// 2. Serve các file tĩnh từ thư mục dist (nếu tồn tại)
-// Fix: Use 'as any' to resolve TypeScript overload ambiguity for app.use with express.static
 if (fs.existsSync(distPath)) {
   app.use(express.static(distPath) as any);
 } else {
-  // Dự phòng cho môi trường dev nếu chưa build dist
   app.use(express.static(__dirname) as any);
 }
 
-// --- LOGIC ĐỒNG BỘ TIỀN TỆ ---
-function syncBalances(room: Room) {
+function updateGlobalStats(room: Room) {
   if (!room.game) return;
-  if (!persistentBalances[room.id]) persistentBalances[room.id] = {};
-  
-  room.game.players.forEach(p => {
-    persistentBalances[room.id][p.id] = p.balance;
+  const lastGame = room.game.history[0];
+  if (!lastGame) return;
+
+  if (!globalHistory[room.id]) globalHistory[room.id] = [];
+  globalHistory[room.id].unshift(lastGame);
+  if (globalHistory[room.id].length > 100) globalHistory[room.id] = globalHistory[room.id].slice(0, 100);
+
+  lastGame.players.forEach(p => {
+    if (!persistentPlayers[p.id]) {
+       persistentPlayers[p.id] = {
+         id: p.id,
+         name: p.name,
+         balance: p.balanceAfter,
+         stats: createEmptyStats()
+       };
+    }
+    
+    const ps = persistentPlayers[p.id];
+    ps.balance = p.balanceAfter;
+    ps.stats.totalRounds++;
+    
+    if (p.change > 0) {
+      ps.stats.totalWin++;
+      ps.stats.totalMoneyWin += p.change;
+    } else if (p.change < 0) {
+      ps.stats.totalLose++;
+      ps.stats.totalMoneyLose += Math.abs(p.change);
+    }
+
+    if (p.isBurned) ps.stats.totalCongCount++;
+
+    // Thống kê sự kiện từ event list
+    lastGame.events.forEach(ev => {
+      if (ev.toPlayerId === p.id && (ev.type === 'CHOP' || ev.type === 'OVER_CHOP')) {
+        ps.stats.totalHeoCut++;
+      }
+      if (ev.fromPlayerId === p.id && ev.type === 'THOI') {
+        ps.stats.totalHeoBurn++;
+      }
+    });
   });
+
+  saveData();
 }
 
-// --- WEBSOCKET SERVER ---
+function createEmptyStats(): GlobalPlayerStats {
+  return {
+    totalRounds: 0,
+    totalWin: 0,
+    totalLose: 0,
+    totalMoneyWin: 0,
+    totalMoneyLose: 0,
+    totalHeoCut: 0,
+    totalHeoBurn: 0,
+    totalCongCount: 0
+  };
+}
+
 const server = app.listen(port, () => {
   console.log(`Server đang chạy tại port ${port}`);
 });
@@ -59,20 +144,33 @@ wss.on('connection', (ws) => {
         case 'JOIN_ROOM':
           clientId = message.payload.id;
           const joinedRoom = roomManager.joinRoom(clientId, message.payload.name, ws, message.payload.roomId);
-          if (!persistentBalances[joinedRoom.id]) persistentBalances[joinedRoom.id] = {};
-          if (persistentBalances[joinedRoom.id][clientId] === undefined) {
-            persistentBalances[joinedRoom.id][clientId] = 1000000;
+          
+          if (!persistentPlayers[clientId]) {
+            persistentPlayers[clientId] = {
+              id: clientId,
+              name: message.payload.name,
+              balance: 1000000,
+              stats: createEmptyStats()
+            };
           }
+          
           broadcast(joinedRoom, {
             type: 'ROOM_UPDATE',
             payload: { players: joinedRoom.playerInfos, roomId: joinedRoom.id }
           });
-          if (joinedRoom.game) {
-            ws.send(JSON.stringify({
-              type: 'GAME_STATE',
-              payload: joinedRoom.game.getState(clientId)
-            }));
+
+          if (!joinedRoom.game) {
+             joinedRoom.game = new GameInstance([], 10000);
+             if (globalHistory[joinedRoom.id]) joinedRoom.game.setHistory(globalHistory[joinedRoom.id]);
           }
+
+          ws.send(JSON.stringify({
+            type: 'GAME_STATE',
+            payload: {
+               ...joinedRoom.game.getState(clientId),
+               globalStats: persistentPlayers[clientId].stats
+            }
+          }));
           break;
 
         case 'START_GAME':
@@ -80,7 +178,7 @@ wss.on('connection', (ws) => {
             const playersData = room.playerInfos.slice(0, 4).map(p => ({
               id: p.id,
               name: p.name,
-              balance: persistentBalances[room.id][p.id] || 1000000
+              balance: persistentPlayers[p.id]?.balance || 1000000
             }));
 
             if (playersData.length < 2) {
@@ -88,14 +186,17 @@ wss.on('connection', (ws) => {
               return;
             }
 
-            const prevInternalState = room.game ? room.game.getInternalState() : null;
             const currentBet = room.game ? room.game.bet : 10000;
+            const prevHistory = room.game ? room.game.history : (globalHistory[room.id] || []);
+            const prevInternal = room.game ? room.game.getInternalState() : null;
+            
             room.game = new GameInstance(playersData, currentBet);
-            if (prevInternalState) room.game.setPersistentState(prevInternalState);
+            room.game.setHistory(prevHistory);
+            if (prevInternal) room.game.setPersistentState(prevInternal);
             
             try {
               room.game.startNewRound();
-              if (room.game.gamePhase === 'finished') syncBalances(room);
+              if (room.game.gamePhase === 'finished') updateGlobalStats(room);
               broadcastGameState(room);
             } catch (err: any) {
               ws.send(JSON.stringify({ type: 'ERROR', payload: err.message }));
@@ -104,14 +205,9 @@ wss.on('connection', (ws) => {
           break;
 
         case 'UPDATE_BET':
-          if (room) {
-            if (room.game) {
-              room.game.bet = message.payload.bet;
-              broadcastGameState(room);
-            } else {
-              room.game = new GameInstance([], message.payload.bet) as any;
-              broadcastGameState(room);
-            }
+          if (room?.game) {
+            room.game.bet = message.payload.bet;
+            broadcastGameState(room);
           }
           break;
 
@@ -121,59 +217,22 @@ wss.on('connection', (ws) => {
             const error = room.game.playMove(clientId, message.payload.cardIds);
             
             if (!error) {
-              syncBalances(room);
-
-              if (room.game.lastMove?.isOverChop) {
-                broadcast(room, {
-                  type: 'SPECIAL_EVENT',
-                  payload: { type: 'chat_chong', playerName: room.playerInfos.find(p => p.id === clientId)?.name || 'Người chơi' }
-                });
-              } else if (room.game.lastMove?.isChop) {
-                const handType = room.game.lastMove.type;
-                const chopType = handType === HandType.FOUR_CONSECUTIVE_PAIRS ? 'four_pairs' : 
-                                 handType === HandType.FOUR_OF_A_KIND ? 'four_of_a_kind' : 'three_pairs';
-                broadcast(room, {
-                  type: 'SPECIAL_EVENT',
-                  payload: { type: 'chat_heo', chopType, playerName: room.playerInfos.find(p => p.id === clientId)?.name || 'Người chơi' }
-                });
-              }
-
               if (prevPhase === 'playing' && room.game.gamePhase === 'finished') {
-                syncBalances(room);
-                const winnerId = room.game.startingPlayerId;
+                updateGlobalStats(room);
                 
-                if ((room.game as any).isThreeSpadeWin) {
+                // Gửi các sự kiện đặc biệt cho client
+                const lastGame = room.game.history[0];
+                lastGame.events.forEach(ev => {
+                   let specialType = 'info';
+                   if (ev.type === 'CHOP') specialType = 'chat_heo';
+                   else if (ev.type === 'OVER_CHOP') specialType = 'chat_chong';
+                   else if (ev.type === 'THOI') specialType = 'thui_heo';
+                   else if (ev.type === 'CONG') specialType = 'chay_bai';
+                   
                    broadcast(room, {
                      type: 'SPECIAL_EVENT',
-                     payload: { type: 'three_spade_win', playerName: room.playerInfos.find(p => p.id === winnerId)?.name || 'Người chơi' }
+                     payload: { type: specialType, playerName: ev.playerName, chopType: 'three_pairs' }
                    });
-                }
-
-                const endGameEvents: any[] = [];
-                room.game.players.forEach(p => {
-                  if (p.isBurned) {
-                    endGameEvents.push({ type: 'chay_bai', playerName: p.name });
-                  } else if (p.id !== winnerId) {
-                    const thui = MoneyEngine.calculateThui(p, room.game!.bet);
-                    if (thui.totalLoss > 0) {
-                      thui.details.forEach(detail => {
-                        let eventType: any = 'thui_heo';
-                        if (detail.includes('thông')) eventType = 'thui_3_doi_thong';
-                        else if (detail.includes('Tứ quý')) eventType = 'thui_tu_quy';
-                        endGameEvents.push({ type: eventType, playerName: p.name });
-                      });
-                    }
-                  }
-                });
-
-                endGameEvents.sort((a, b) => {
-                  if (a.type === 'chay_bai' && b.type !== 'chay_bai') return -1;
-                  if (a.type !== 'chay_bai' && b.type === 'chay_bai') return 1;
-                  return 0;
-                });
-
-                endGameEvents.forEach(ev => {
-                  broadcast(room, { type: 'SPECIAL_EVENT', payload: ev });
                 });
               }
               broadcastGameState(room);
@@ -263,24 +322,21 @@ function broadcastGameState(room: any) {
       const state = room.game!.getState(id);
       clientWs.send(JSON.stringify({
         type: 'GAME_STATE',
-        payload: state
+        payload: {
+          ...state,
+          globalStats: persistentPlayers[id]?.stats || createEmptyStats()
+        }
       }));
     }
   });
 }
 
-// 3. Xử lý SPA Routing: Fallback về index.html của thư mục dist cho mọi route không tìm thấy
 app.get('*', (req, res) => {
   const indexPath = path.join(distPath, 'index.html');
-  if (fs.existsSync(indexPath)) {
-    res.sendFile(indexPath);
-  } else {
-    // Nếu chưa build dist, thử gửi file index.html ở thư mục gốc
+  if (fs.existsSync(indexPath)) res.sendFile(indexPath);
+  else {
     const rootIndexPath = path.join(__dirname, 'index.html');
-    if (fs.existsSync(rootIndexPath)) {
-      res.sendFile(rootIndexPath);
-    } else {
-      res.status(404).send('Vui lòng chạy build trước khi khởi động server trên production.');
-    }
+    if (fs.existsSync(rootIndexPath)) res.sendFile(rootIndexPath);
+    else res.status(404).send('Vui lòng chạy build.');
   }
 });

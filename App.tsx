@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Card, CardSuit, GameHistory, HandType, ChatMessage, TrollAction, TrollType } from './types';
+import { Card, CardSuit, GameHistory, HandType, ChatMessage, TrollAction, TrollType, GlobalPlayerStats } from './types';
 import ChopEffect, { ChopType } from './ChopEffect';
 import OverChopEffect from './OverChopEffect';
 import RankEffect from './RankEffect';
@@ -120,28 +120,8 @@ const playSfx = (type: 'play' | 'pass' | 'deal' | 'click' | 'win') => {
   }
 };
 
-const HistoryModal: React.FC<{ history: GameHistory[], onClose: () => void }> = ({ history, onClose }) => {
-  const stats = useMemo(() => {
-    const playerStats: Record<string, { 
-      name: string, 
-      r1: number, r2: number, r3: number, r4: number, 
-      totalChange: number 
-    }> = {};
-
-    history.forEach(game => {
-      game.players.forEach(p => {
-        if (!playerStats[p.id]) {
-          playerStats[p.id] = { name: p.name, r1: 0, r2: 0, r3: 0, r4: 0, totalChange: 0 };
-        }
-        playerStats[p.id].totalChange += p.change;
-        if (p.rank === 1) playerStats[p.id].r1++;
-        else if (p.rank === 2) playerStats[p.id].r2++;
-        else if (p.rank === 3) playerStats[p.id].r3++;
-        else if (p.rank === 4) playerStats[p.id].r4++;
-      });
-    });
-    return Object.values(playerStats).sort((a, b) => b.totalChange - a.totalChange);
-  }, [history]);
+const HistoryModal: React.FC<{ history: GameHistory[], stats?: GlobalPlayerStats, onClose: () => void }> = ({ history, stats, onClose }) => {
+  const [activeTab, setActiveTab] = useState<'recent' | 'stats'>('recent');
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[600] bg-black/90 flex items-center justify-center p-4 backdrop-blur-md">
@@ -149,48 +129,111 @@ const HistoryModal: React.FC<{ history: GameHistory[], onClose: () => void }> = 
         <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-950/50">
           <div>
             <h2 className="text-2xl font-black text-white italic tracking-tighter uppercase">Phòng Truyền Thống</h2>
-            <p className="text-slate-500 text-[10px] font-black uppercase tracking-[0.2em] mt-1">Thống kê tổng hợp {history.length} ván</p>
+            <div className="flex gap-4 mt-2">
+               <button onClick={() => setActiveTab('recent')} className={`text-[10px] font-black uppercase tracking-widest pb-1 border-b-2 transition-all ${activeTab === 'recent' ? 'border-yellow-500 text-yellow-500' : 'border-transparent text-slate-500'}`}>Lịch sử ván</button>
+               <button onClick={() => setActiveTab('stats')} className={`text-[10px] font-black uppercase tracking-widest pb-1 border-b-2 transition-all ${activeTab === 'stats' ? 'border-yellow-500 text-yellow-500' : 'border-transparent text-slate-500'}`}>Thống kê tổng</button>
+            </div>
           </div>
           <button onClick={() => { playSfx('click'); onClose(); }} className="bg-slate-800 hover:bg-slate-700 w-10 h-10 rounded-full text-white flex items-center justify-center text-2xl transition-all">&times;</button>
         </div>
-        <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 scrollbar-hide">
-          {stats.map((s, i) => (
-            <div key={i} className="bg-black/40 border border-white/5 rounded-2xl p-6 flex flex-col md:flex-row justify-between items-center gap-4">
-               <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-slate-800 flex items-center justify-center text-xl font-black text-white">
-                     {s.name[0].toUpperCase()}
-                  </div>
-                  <div>
-                     <h3 className="text-white font-black uppercase text-lg">{s.name}</h3>
-                     <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Cơ thủ chuyên nghiệp</p>
-                  </div>
-               </div>
-               <div className="flex gap-4 md:gap-8 text-center">
-                  <div>
-                    <p className="text-yellow-500 text-[10px] font-black">NHẤT</p>
-                    <p className="text-white text-xl font-black">{s.r1}</p>
-                  </div>
-                  <div>
-                    <p className="text-slate-400 text-[10px] font-black">NHÌ</p>
-                    <p className="text-white text-xl font-black">{s.r2}</p>
-                  </div>
-                  <div>
-                    <p className="text-orange-500 text-[10px] font-black">BA</p>
-                    <p className="text-white text-xl font-black">{s.r3}</p>
-                  </div>
-                  <div>
-                    <p className="text-red-500 text-[10px] font-black">BÉT</p>
-                    <p className="text-white text-xl font-black">{s.r4}</p>
-                  </div>
-               </div>
-               <div className="text-right">
-                  <p className="text-slate-500 text-[10px] font-black uppercase">Tổng tài sản</p>
-                  <p className={`text-2xl font-black italic ${s.totalChange >= 0 ? 'text-emerald-400' : 'text-red-500'}`}>
-                    {s.totalChange > 0 ? '+' : ''}{s.totalChange.toLocaleString()} $
-                  </p>
-               </div>
-            </div>
-          ))}
+
+        <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-4 scrollbar-hide">
+          {activeTab === 'recent' ? (
+            history.length > 0 ? history.map((round, i) => (
+              <div key={i} className="bg-black/40 border border-white/5 rounded-2xl p-4 space-y-3">
+                 <div className="flex justify-between items-center border-b border-white/5 pb-2">
+                    <span className="text-emerald-500 font-black text-xs uppercase tracking-tighter">Round #{round.roundId}</span>
+                    <span className="text-slate-500 text-[9px] font-bold">{new Date(round.timestamp).toLocaleString()}</span>
+                 </div>
+                 <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                    {round.players.map(p => (
+                      <div key={p.id} className="bg-white/5 p-2 rounded-xl text-center">
+                         <p className="text-[10px] text-slate-400 font-black uppercase truncate">{p.name}</p>
+                         <p className={`text-sm font-black italic ${p.change >= 0 ? 'text-emerald-400' : 'text-red-500'}`}>
+                            {p.change > 0 ? '+' : ''}{p.change.toLocaleString()}$
+                         </p>
+                      </div>
+                    ))}
+                 </div>
+                 {round.events && round.events.length > 0 && (
+                   <div className="bg-slate-900/50 p-3 rounded-xl space-y-1">
+                      <p className="text-[8px] font-black text-slate-500 uppercase tracking-widest mb-1">Diễn biến quan trọng</p>
+                      {round.events.map((ev, idx) => (
+                        <div key={idx} className="flex items-center gap-2 text-[10px]">
+                           <span className="text-yellow-500">◈</span>
+                           <span className="text-slate-300">{ev.description}</span>
+                        </div>
+                      ))}
+                   </div>
+                 )}
+              </div>
+            )) : (
+              <div className="h-full flex flex-col items-center justify-center text-slate-500 py-20">
+                 <span className="text-4xl mb-4">📭</span>
+                 <p className="font-black uppercase text-xs">Chưa có dữ liệu ván đấu</p>
+              </div>
+            )
+          ) : (
+            stats ? (
+              <div className="space-y-6">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                   {[
+                     { label: 'Tổng Ván', val: stats.totalRounds, color: 'text-white' },
+                     { label: 'Thắng', val: stats.totalWin, color: 'text-emerald-400' },
+                     { label: 'Thua', val: stats.totalLose, color: 'text-red-400' },
+                     { label: 'Tỷ lệ thắng', val: `${stats.totalRounds > 0 ? Math.round((stats.totalWin/stats.totalRounds)*100) : 0}%`, color: 'text-yellow-400' }
+                   ].map((item, idx) => (
+                     <div key={idx} className="bg-white/5 p-4 rounded-2xl text-center border border-white/5">
+                        <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-1">{item.label}</p>
+                        <p className={`text-2xl font-black italic ${item.color}`}>{item.val}</p>
+                     </div>
+                   ))}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                   <div className="bg-emerald-900/10 border border-emerald-500/20 p-6 rounded-3xl">
+                      <p className="text-emerald-500 text-[10px] font-black uppercase mb-4 tracking-widest">Tài chính tích lũy</p>
+                      <div className="space-y-4">
+                         <div className="flex justify-between items-center">
+                            <span className="text-slate-400 text-xs">Tổng tiền ăn</span>
+                            <span className="text-emerald-400 font-black">+{stats.totalMoneyWin.toLocaleString()}$</span>
+                         </div>
+                         <div className="flex justify-between items-center">
+                            <span className="text-slate-400 text-xs">Tổng tiền thua</span>
+                            <span className="text-red-400 font-black">-{stats.totalMoneyLose.toLocaleString()}$</span>
+                         </div>
+                         <div className="border-t border-white/5 pt-2 flex justify-between items-center">
+                            <span className="text-white font-black text-sm">Lợi nhuận ròng</span>
+                            <span className={`font-black text-lg italic ${(stats.totalMoneyWin - stats.totalMoneyLose) >= 0 ? 'text-yellow-400' : 'text-red-500'}`}>
+                               {(stats.totalMoneyWin - stats.totalMoneyLose).toLocaleString()}$
+                            </span>
+                         </div>
+                      </div>
+                   </div>
+
+                   <div className="bg-purple-900/10 border border-purple-500/20 p-6 rounded-3xl">
+                      <p className="text-purple-500 text-[10px] font-black uppercase mb-4 tracking-widest">Kỹ năng đặc biệt</p>
+                      <div className="space-y-4">
+                         <div className="flex justify-between items-center">
+                            <span className="text-slate-400 text-xs">Số lần chặt heo</span>
+                            <span className="text-white font-black">{stats.totalHeoCut}</span>
+                         </div>
+                         <div className="flex justify-between items-center">
+                            <span className="text-slate-400 text-xs">Số lần bị thối bài</span>
+                            <span className="text-orange-400 font-black">{stats.totalHeoBurn}</span>
+                         </div>
+                         <div className="flex justify-between items-center">
+                            <span className="text-slate-400 text-xs">Số lần bị cóng</span>
+                            <span className="text-cyan-400 font-black">{stats.totalCongCount}</span>
+                         </div>
+                      </div>
+                   </div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-20 text-slate-500 uppercase text-[10px] font-black">Vui lòng tham gia ít nhất 1 ván để xem thống kê</div>
+            )
+          )}
         </div>
       </motion.div>
     </motion.div>
@@ -248,7 +291,6 @@ const CardComponent: React.FC<{ card: Card | null; isSelected?: boolean; onClick
       whileHover={{ y: -5 }}
       className={`relative game-card bg-white rounded-md md:rounded-lg shadow-xl cursor-pointer select-none flex flex-col p-1 md:p-2 border ${isSelected ? 'border-yellow-400 ring-2 ring-yellow-400/50' : 'border-slate-200'}`}
     >
-      {/* Fixed: Use card.rank instead of rank to resolve "Cannot find name 'rank'" error */}
       <div className={`text-[12px] md:text-2xl font-black leading-none ${SUIT_COLORS[card.suit]}`}>{getRankLabel(card.rank)}</div>
       <div className={`text-[10px] md:text-xl ${SUIT_COLORS[card.suit]}`}>{SUIT_SYMBOLS[card.suit]}</div>
       <div className={`absolute bottom-0.5 right-0.5 text-2xl md:text-5xl opacity-10 ${SUIT_COLORS[card.suit]}`}>{SUIT_SYMBOLS[card.suit]}</div>
@@ -500,7 +542,6 @@ const App: React.FC = () => {
     <div className="h-screen h-[100dvh] bg-slate-950 relative overflow-hidden flex flex-col font-sans select-none">
       <div ref={remoteAudioContainerRef} className="hidden pointer-events-none" />
       
-      {/* Troll Module placed at the very top level for correct stacking and interaction */}
       <TrollModule activeTrolls={activeTrolls} playerPositions={playerPositions} />
 
       <div className="absolute top-4 right-4 flex gap-2 z-[200]">
@@ -570,7 +611,6 @@ const App: React.FC = () => {
       </AnimatePresence>
 
       <div className="bg-slate-900/80 backdrop-blur-xl border-t border-white/10 pt-2 pb-safe px-2 md:px-4 z-[100] relative">
-          {/* Turn Indicator for Local Player */}
           {isMyTurn && gameState?.gamePhase === 'playing' && (
             <motion.div 
               initial={{ opacity: 0, y: 10 }}
@@ -581,8 +621,7 @@ const App: React.FC = () => {
             </motion.div>
           )}
 
-          {/* Player hand with overlapping cards - adjusted to be more visible in landscape */}
-          <div className="max-w-full mx-auto flex -space-x-4 md:-space-x-8 justify-center overflow-x-auto scrollbar-hide py-3 px-10">
+          <div className="max-w-full mx-auto flex -space-x-1 md:-space-x-2 justify-center overflow-x-auto scrollbar-hide py-3 px-10">
              <AnimatePresence>
                {me?.hand?.map((c: any, idx: number) => (
                  <CardComponent key={c.id || idx} card={c} isDealing={dealingCards} index={idx} isSelected={selectedCards.includes(c?.id)} onClick={() => setSelectedCards(prev => prev.includes(c.id) ? prev.filter(id => id !== c.id) : [...prev, c.id])} />
@@ -603,7 +642,7 @@ const App: React.FC = () => {
       </div>
       
       <AnimatePresence>
-        {showHistory && <HistoryModal history={gameState?.history || []} onClose={() => setShowHistory(false)} />}
+        {showHistory && <HistoryModal history={gameState?.history || []} stats={gameState?.globalStats} onClose={() => setShowHistory(false)} />}
         {showSettings && <SettingsModal currentBet={gameState?.bet || 10000} onUpdate={(bet) => ws?.send(JSON.stringify({ type: 'UPDATE_BET', payload: { bet } }))} onClose={() => setShowSettings(false)} onOpenHistory={() => { setShowSettings(false); setShowHistory(true); }} />}
       </AnimatePresence>
     </div>
@@ -615,7 +654,6 @@ const PlayerAvatar: React.FC<{ player: any, isTurn: boolean, onTroll: (type: Tro
   
   return (
     <div className={`relative p-1.5 rounded-2xl border-2 transition-all shadow-xl ${isTurn ? 'border-yellow-400 bg-yellow-500/20 scale-110' : 'border-white/5 bg-slate-900/80'}`}>
-      {/* Turn Indicator Badge */}
       <AnimatePresence>
         {isTurn && (
           <motion.div 
