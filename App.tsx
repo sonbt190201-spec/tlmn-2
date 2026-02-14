@@ -488,10 +488,17 @@ const App: React.FC = () => {
   };
 
   const orderedPlayers = useMemo(() => {
-    if (!gameState?.players) return roomInfo?.players || [];
-    const myIndex = gameState.players.findIndex((p: any) => p.id === myId);
-    if (myIndex === -1) return gameState.players;
-    return [...gameState.players.slice(myIndex), ...gameState.players.slice(0, myIndex)];
+    // SỬA LỖI: Ưu tiên danh sách từ roomInfo nếu trong game đang rỗng (chưa bắt đầu)
+    const playersInGame = gameState?.players || [];
+    const playersInRoom = roomInfo?.players || [];
+    
+    let basePlayers = (playersInGame.length > 0) ? playersInGame : playersInRoom;
+    
+    if (basePlayers.length === 0) return [];
+    
+    const myIndex = basePlayers.findIndex((p: any) => p.id === myId);
+    if (myIndex === -1) return basePlayers;
+    return [...basePlayers.slice(myIndex), ...basePlayers.slice(0, myIndex)];
   }, [gameState, roomInfo, myId]);
 
   const playerPositions = useMemo(() => {
@@ -556,7 +563,7 @@ const App: React.FC = () => {
          <div className="absolute inset-0 z-[50] pointer-events-none">
            {orderedPlayers.slice(1).map((p: any) => (
              <div key={p.id} className="absolute text-center group pointer-events-auto avatar-landscape" style={{ left: playerPositions[p.id].x, top: playerPositions[p.id].y, transform: 'translate(-50%, -50%)' }}>
-                <PlayerAvatar player={p} isTurn={gameState?.players[gameState.currentTurn]?.id === p.id} onTroll={(type) => ws?.send(JSON.stringify({ type: 'SEND_TROLL', payload: { type, toId: p.id } }))} />
+                <PlayerAvatar player={p} isTurn={gameState?.players && gameState.players[gameState.currentTurn]?.id === p.id} onTroll={(type) => ws?.send(JSON.stringify({ type: 'SEND_TROLL', payload: { type, toId: p.id } }))} />
              </div>
            ))}
          </div>
@@ -710,7 +717,7 @@ const PlayerAvatar: React.FC<{ player: any, isTurn: boolean, onTroll: (type: Tro
       </div>
       <div className="mt-1">
         <p className="text-white text-[9px] font-black truncate max-w-[60px] uppercase">{player.name}</p>
-        <p className="text-yellow-500 text-[8px] font-bold italic">${player.balance?.toLocaleString()}</p>
+        <p className="text-yellow-500 text-[8px] font-bold italic">${player.balance?.toLocaleString() || '0'}</p>
       </div>
     </div>
   );
