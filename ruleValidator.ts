@@ -52,26 +52,24 @@ export function detectHandType(cards: Card[]): HandType {
     return HandType.INVALID;
   }
 
-  if (n >= 5) {
-    if (!hasTwo && distinctRanks.length === n && isConsecutive(ranks)) {
-      return HandType.STRAIGHT;
+  if (n >= 6 && n % 2 === 0) {
+    let allPairs = true;
+    const pairRanks: number[] = [];
+    for (let i = 0; i < n; i += 2) {
+      if (ranks[i] !== ranks[i + 1]) {
+        allPairs = false;
+        break;
+      }
+      pairRanks.push(ranks[i]);
     }
+    if (allPairs && !pairRanks.includes(15) && isConsecutive(pairRanks)) {
+      if (n === 6) return HandType.THREE_CONSECUTIVE_PAIRS;
+      if (n === 8) return HandType.FOUR_CONSECUTIVE_PAIRS;
+    }
+  }
 
-    if (n === 6 || n === 8 || n === 10) {
-      let allPairs = true;
-      const pairRanks: number[] = [];
-      for (let i = 0; i < n; i += 2) {
-        if (ranks[i] !== ranks[i + 1]) {
-          allPairs = false;
-          break;
-        }
-        pairRanks.push(ranks[i]);
-      }
-      if (allPairs && !pairRanks.includes(15) && isConsecutive(pairRanks)) {
-        if (n === 6) return HandType.THREE_CONSECUTIVE_PAIRS;
-        if (n === 8) return HandType.FOUR_CONSECUTIVE_PAIRS;
-      }
-    }
+  if (n >= 5 && !hasTwo && distinctRanks.length === n && isConsecutive(ranks)) {
+    return HandType.STRAIGHT;
   }
 
   return HandType.INVALID;
@@ -83,14 +81,14 @@ export function compareHands(newCards: Card[], lastCards: Card[]): number {
 
   if (typeNew === HandType.INVALID || typeLast === HandType.INVALID) return 0;
 
-  // 1. Cùng loại, cùng độ dài
+  // 1. Cùng loại, cùng số lượng lá
   if (typeNew === typeLast && newCards.length === lastCards.length) {
     const weightNew = getCardWeight(newCards[newCards.length - 1]);
     const weightLast = getCardWeight(lastCards[lastCards.length - 1]);
     return weightNew > weightLast ? 1 : -1;
   }
 
-  // 2. Chặt Heo
+  // 2. Luật Chặt Heo
   if (typeLast === HandType.SINGLE && lastCards[0].rank === 15) {
     if (typeNew === HandType.THREE_CONSECUTIVE_PAIRS || 
         typeNew === HandType.FOUR_OF_A_KIND || 
