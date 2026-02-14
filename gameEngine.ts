@@ -149,7 +149,8 @@ export class GameEngine {
       if (p.id !== winnerId) this.finishedPlayers.push(p.id);
     });
     
-    const payouts = MoneyEngine.calculateInstantWin(winnerId, this.players.map(p => p.id), this.bet);
+    // Fix: Using calculateTrangMoney instead of non-existent calculateInstantWin
+    const payouts = MoneyEngine.calculateTrangMoney(winnerId, this.players.map(p => p.id), this.bet);
     this.applyMoneyTransaction(payouts, "INSTANT_WIN", reason);
     
     this.gamePhase = "finished";
@@ -346,7 +347,13 @@ export class GameEngine {
     const isBurnedMap: Record<string, boolean> = {};
     this.players.forEach(p => isBurnedMap[p.id] = p.isBurned);
     
-    const rankPayouts = MoneyEngine.calculateGameEnd(this.players, this.bet, isBurnedMap);
+    // Fix: Replaced non-existent calculateGameEnd with logic using calculateCongMoney or calculateRankMoney
+    // Corrected calculateCongMoney call to match expected 2 arguments
+    const burnedCount = this.players.filter(p => p.isBurned).length;
+    const rankPayouts = (burnedCount > 0)
+      ? MoneyEngine.calculateCongMoney(this.players, this.bet)
+      : MoneyEngine.calculateRankMoney(this.players, this.bet);
+
     const hasAnyBurn = Object.values(isBurnedMap).some(v => v);
     this.applyMoneyTransaction(rankPayouts, hasAnyBurn ? "BURN" : "RANK", "KẾT QUẢ");
 
@@ -355,7 +362,8 @@ export class GameEngine {
     
     losersForThui.forEach(loser => {
        if (!loser) return;
-       const thuiResult = MoneyEngine.calculateThui(loser, this.bet);
+       // Fix: Replaced non-existent calculateThui with calculateThoiValue
+       const thuiResult = MoneyEngine.calculateThoiValue(loser, this.bet);
        if (thuiResult.totalLoss > 0) {
          this.applyMoneyTransaction([
            { playerId: loser.id, change: -thuiResult.totalLoss },

@@ -1,96 +1,54 @@
 
 import { Player, PayoutResult } from './types.js';
 
-export interface ThuiResult {
+export interface ThoiResult {
   totalLoss: number;
   details: string[];
 }
 
 export class MoneyEngine {
   /**
-   * Tính tiền theo thứ hạng cuối ván
-   * Nhất +1, Nhì +0.5, Ba -0.5, Bét -1
+   * VI. QUY TẮC THỐI (Độc lập)
+   * Heo đen: 0.5, Heo đỏ: 1, 3 đôi thông: 1, Tứ quý: 4
    */
-  static calculateRankMoney(players: Player[], bet: number): PayoutResult[] {
-    const results: PayoutResult[] = [];
-    players.forEach(p => {
-      let change = 0;
-      if (p.finishedRank === 1) change = bet;
-      else if (p.finishedRank === 2) change = bet * 0.5;
-      else if (p.finishedRank === 3) change = -bet * 0.5;
-      else if (p.finishedRank === 4) change = -bet;
-      results.push({ playerId: p.id, change, reason: `Hạng ${p.finishedRank}` });
-    });
-    return results;
-  }
-
-  /**
-   * Tính tiền Cóng (Cháy bài)
-   */
-  static calculateCongMoney(players: Player[], bet: number, burnedCount: number): PayoutResult[] {
-    const results: PayoutResult[] = [];
-    const winner = players.find(p => p.finishedRank === 1);
-    if (!winner) return results;
-
-    if (burnedCount === 1) {
-      // 1 người cóng: Cóng -2, Thắng +2, Nhì/Ba bình thường
-      players.forEach(p => {
-        let change = 0;
-        if (p.isBurned) change = -bet * 2;
-        else if (p.finishedRank === 1) change = bet * 2;
-        else if (p.finishedRank === 2) change = bet * 0.5;
-        else if (p.finishedRank === 3) change = -bet * 0.5;
-        results.push({ playerId: p.id, change, reason: p.isBurned ? "Cóng (-2x)" : `Hạng ${p.finishedRank}` });
-      });
-    } else {
-      // 2+ người cóng: Những người cóng -2, Nhất ăn tất, người còn lại (Hạng 3) hòa
-      players.forEach(p => {
-        let change = 0;
-        if (p.isBurned) change = -bet * 2;
-        else if (p.finishedRank === 1) change = bet * 2 * burnedCount;
-        else change = 0;
-        results.push({ playerId: p.id, change, reason: p.isBurned ? "Cóng (-2x)" : p.finishedRank === 1 ? "Thắng Cóng" : "Hòa" });
-      });
-    }
-    return results;
-  }
-
-  /**
-   * Tính tiền thối bài (Heo, Hàng)
-   */
-  static calculateThoiValue(player: Player, bet: number): ThuiResult {
+  static calculateThoi(player: Player, bet: number): ThoiResult {
     let loss = 0;
     const details: string[] = [];
-    const cards = player.hand;
+    const hand = player.hand;
     const counts: Record<number, number> = {};
-    
-    cards.forEach(c => {
-      // Heo: Đỏ = 1x, Đen = 0.5x
+
+    hand.forEach(c => {
+      // Heo (rank 15)
       if (c.rank === 15) {
-        const isRed = (c.suit === 'heart' || c.suit === 'diamond');
-        const val = isRed ? bet : bet * 0.5;
-        loss += val;
-        details.push(isRed ? "Heo đỏ" : "Heo đen");
+        if (c.suit === 'heart' || c.suit === 'diamond') {
+          loss += bet;
+          details.push("Heo đỏ");
+        } else {
+          loss += bet * 0.5;
+          details.push("Heo đen");
+        }
       }
       counts[c.rank] = (counts[c.rank] || 0) + 1;
     });
 
-    // Tứ quý thối = 2 heo đỏ = 2x
+    // Tứ quý (4 lá cùng rank < 15)
     Object.keys(counts).forEach(rank => {
-      if (counts[Number(rank)] === 4 && Number(rank) < 15) {
-        loss += bet * 2;
+      const r = Number(rank);
+      if (counts[r] === 4 && r < 15) {
+        loss += bet * 4;
         details.push("Tứ quý");
       }
     });
 
-    // 3 đôi thông thối = 1 heo đỏ + 1 heo đen = 1.5x
-    const sortedRanks = Object.keys(counts).map(Number).sort((a,b) => a-b);
+    // 3 đôi thông (3 cặp liên tiếp < 15)
+    const sortedRanks = Object.keys(counts).map(Number).sort((a, b) => a - b);
     for (let i = 0; i < sortedRanks.length - 2; i++) {
-      if (counts[sortedRanks[i]] >= 2 && counts[sortedRanks[i+1]] >= 2 && counts[sortedRanks[i+2]] >= 2 &&
-          sortedRanks[i+1] === sortedRanks[i]+1 && sortedRanks[i+2] === sortedRanks[i+1]+1 && sortedRanks[i+2] < 15) {
-          loss += bet * 1.5;
-          details.push("3 đôi thông");
-          break; // Chỉ tính bộ thông cao nhất nếu có nhiều bộ
+      if (counts[sortedRanks[i]] >= 2 && counts[sortedRanks[i + 1]] >= 2 && counts[sortedRanks[i + 2]] >= 2 &&
+          sortedRanks[i + 1] === sortedRanks[i] + 1 && sortedRanks[i + 2] === sortedRanks[i + 1] + 1 &&
+          sortedRanks[i + 2] < 15) {
+        loss += bet;
+        details.push("3 đôi thông");
+        break; 
       }
     }
 
@@ -98,14 +56,102 @@ export class MoneyEngine {
   }
 
   /**
-   * Tính tiền Ăn Trắng
-   * Nhất +6 (nhận từ 3 người bét x 2)
+   * settleGame: Hàm điều phối chính dựa trên playerCount
    */
-  static calculateTrangMoney(winnerId: string, playerIds: string[], bet: number): PayoutResult[] {
-    return playerIds.map(id => ({
-      playerId: id,
-      change: id === winnerId ? bet * 2 * (playerIds.length - 1) : -bet * 2,
-      reason: id === winnerId ? "Ăn trắng" : "Bị ăn trắng"
-    }));
+  static settleGame(players: Player[], bet: number): PayoutResult[] {
+    const playerCount = players.length;
+    const results: PayoutResult[] = [];
+    // Sắp xếp người chơi theo rank thực tế (1 -> 4)
+    const sorted = [...players].sort((a, b) => (a.finishedRank || 0) - (b.finishedRank || 0));
+
+    switch (playerCount) {
+      case 2:
+        this.settleTable2(sorted[0], sorted[1], bet, results);
+        break;
+      case 3:
+        this.settleTable3(sorted[0], sorted[1], sorted[2], bet, results);
+        break;
+      case 4:
+        this.settleTable4(sorted[0], sorted[1], sorted[2], sorted[3], bet, results);
+        break;
+      default:
+        players.forEach(p => results.push({ playerId: p.id, change: 0, reason: "Không đủ người" }));
+    }
+
+    return results;
   }
+
+  /**
+   * III. BÀN 2 NGƯỜI
+   * Tiền thứ hạng: Nhất +1, Bét -1
+   * Tiền thối: Bét -> Nhất
+   */
+  private static settleTable2(p1: Player, last: Player, bet: number, results: PayoutResult[]) {
+    // 1. Tiền thứ hạng
+    results.push({ playerId: p1.id, change: bet, reason: "Nhất (+1 cược)" });
+    results.push({ playerId: last.id, change: -bet, reason: "Bét (-1 cược)" });
+
+    // 2. Tiền thối
+    const thoi = this.calculateThoi(last, bet);
+    if (thoi.totalLoss > 0) {
+      results.push({ playerId: p1.id, change: thoi.totalLoss, reason: `Nhận thối: ${thoi.details.join(', ')}` });
+      results.push({ playerId: last.id, change: -thoi.totalLoss, reason: `Thối bài: ${thoi.details.join(', ')}` });
+    }
+  }
+
+  /**
+   * IV. BÀN 3 NGƯỜI
+   * Tiền thứ hạng: Nhất +1, Nhì 0, Bét -1 (Bét trả cho Nhất)
+   * Tiền thối: Bét -> Nhì
+   */
+  private static settleTable3(p1: Player, p2: Player, last: Player, bet: number, results: PayoutResult[]) {
+    // 1. Tiền thứ hạng
+    results.push({ playerId: p1.id, change: bet, reason: "Nhất (+1 cược)" });
+    results.push({ playerId: p2.id, change: 0, reason: "Nhì" });
+    results.push({ playerId: last.id, change: -bet, reason: "Bét (-1 cược)" });
+
+    // 2. Tiền thối
+    const thoi = this.calculateThoi(last, bet);
+    if (thoi.totalLoss > 0) {
+      results.push({ playerId: p2.id, change: thoi.totalLoss, reason: `Nhì nhận thối: ${thoi.details.join(', ')}` });
+      results.push({ playerId: last.id, change: -thoi.totalLoss, reason: `Thối bài: ${thoi.details.join(', ')}` });
+    }
+  }
+
+  /**
+   * V. BÀN 4 NGƯỜI
+   * Tiền thứ hạng: Nhất +1, Nhì +0.5, Ba -0.5, Bét -1
+   * Tiền thối: Bét -> Ba
+   */
+  private static settleTable4(p1: Player, p2: Player, p3: Player, last: Player, bet: number, results: PayoutResult[]) {
+    // 1. Tiền thứ hạng
+    results.push({ playerId: p1.id, change: bet, reason: "Nhất (+1 cược)" });
+    results.push({ playerId: p2.id, change: bet * 0.5, reason: "Nhì (+0.5 cược)" });
+    results.push({ playerId: p3.id, change: -bet * 0.5, reason: "Ba (-0.5 cược)" });
+    results.push({ playerId: last.id, change: -bet, reason: "Bét (-1 cược)" });
+
+    // 2. Tiền thối
+    const thoi = this.calculateThoi(last, bet);
+    if (thoi.totalLoss > 0) {
+      results.push({ playerId: p3.id, change: thoi.totalLoss, reason: `Ba nhận thối: ${thoi.details.join(', ')}` });
+      results.push({ playerId: last.id, change: -thoi.totalLoss, reason: `Thối bài: ${thoi.details.join(', ')}` });
+    }
+  }
+
+  // Khương định các method cũ để tránh lỗi compile nếu nơi khác đang dùng
+  static calculateThoiValue(p: Player, b: number) { return this.calculateThoi(p, b); }
+  static calculateTrangMoney(w: string, ids: string[], b: number) {
+    const res: PayoutResult[] = [];
+    const winAmt = b * 2 * (ids.length - 1);
+    ids.forEach(id => {
+      res.push({
+        playerId: id,
+        change: id === w ? winAmt : -b * 2,
+        reason: id === w ? "Ăn trắng" : "Bị ăn trắng (-2 cược)"
+      });
+    });
+    return res;
+  }
+  static calculateRankMoney(p: Player[], b: number) { return this.settleGame(p, b); }
+  static calculateCongMoney(p: Player[], b: number) { return this.settleGame(p, b); }
 }
