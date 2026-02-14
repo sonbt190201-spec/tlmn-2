@@ -23,7 +23,7 @@ const playApplauseSound = () => {
   if (ctx.state === 'suspended') ctx.resume();
   
   const master = ctx.createGain();
-  master.gain.value = 0.85;
+  master.gain.value = 1.5; // TĂNG TỪ 0.85 LÊN 1.5
   master.connect(ctx.destination);
   const now = ctx.currentTime;
 
@@ -38,7 +38,7 @@ const playApplauseSound = () => {
     filter.type = 'bandpass';
     filter.frequency.value = 1000 + Math.random() * 500;
     const g = ctx.createGain();
-    g.gain.setValueAtTime(0.3, time);
+    g.gain.setValueAtTime(0.4, time);
     g.gain.exponentialRampToValueAtTime(0.01, time + 0.08);
     noise.connect(filter);
     filter.connect(g);
