@@ -53,12 +53,10 @@ export function detectHandType(cards: Card[]): HandType {
   }
 
   if (n >= 5) {
-    // Sảnh: không được chứa Heo (2)
     if (!hasTwo && distinctRanks.length === n && isConsecutive(ranks)) {
       return HandType.STRAIGHT;
     }
 
-    // Các bộ đặc biệt (Đôi thông)
     if (n === 6 || n === 8 || n === 10) {
       let allPairs = true;
       const pairRanks: number[] = [];
@@ -69,8 +67,6 @@ export function detectHandType(cards: Card[]): HandType {
         }
         pairRanks.push(ranks[i]);
       }
-
-      // Đôi thông không được chứa Heo (2) trong luật TLMN truyền thống
       if (allPairs && !pairRanks.includes(15) && isConsecutive(pairRanks)) {
         if (n === 6) return HandType.THREE_CONSECUTIVE_PAIRS;
         if (n === 8) return HandType.FOUR_CONSECUTIVE_PAIRS;
@@ -94,31 +90,25 @@ export function compareHands(newCards: Card[], lastCards: Card[]): number {
     return weightNew > weightLast ? 1 : -1;
   }
 
-  // 2. Luật Chặt Heo (Heo là Rank 15)
-  const lastHasHeo = lastCards.some(c => c.rank === 15);
-  
+  // 2. Chặt Heo
   if (typeLast === HandType.SINGLE && lastCards[0].rank === 15) {
-    // Chặt 1 heo: 3 đôi thông, Tứ quý, 4 đôi thông
     if (typeNew === HandType.THREE_CONSECUTIVE_PAIRS || 
         typeNew === HandType.FOUR_OF_A_KIND || 
         typeNew === HandType.FOUR_CONSECUTIVE_PAIRS) return 1;
   }
 
   if (typeLast === HandType.PAIR && lastCards[0].rank === 15) {
-    // Chặt đôi heo: Tứ quý, 4 đôi thông
     if (typeNew === HandType.FOUR_OF_A_KIND || 
         typeNew === HandType.FOUR_CONSECUTIVE_PAIRS) return 1;
   }
 
-  // 3. Luật Chặt Hàng (Chặt chồng)
+  // 3. Chặt Hàng (Chặt chồng)
   if (typeLast === HandType.THREE_CONSECUTIVE_PAIRS) {
-    // Tứ quý hoặc 4 đôi thông chặt được 3 đôi thông
     if (typeNew === HandType.FOUR_OF_A_KIND || 
         typeNew === HandType.FOUR_CONSECUTIVE_PAIRS) return 1;
   }
 
   if (typeLast === HandType.FOUR_OF_A_KIND) {
-    // 4 đôi thông chặt được Tứ quý
     if (typeNew === HandType.FOUR_CONSECUTIVE_PAIRS) return 1;
   }
 
@@ -134,7 +124,7 @@ export const checkInstantWin = (hand: Card[], isFirstGame: boolean): string | nu
   if (counts[15] === 4) return "Tứ quý heo";
   
   const hasThreeToAce = [3,4,5,6,7,8,9,10,11,12,13,14].every(r => counts[r] >= 1);
-  if (hasThreeToAce && counts[15] >= 1) return "Sảnh rồng (3 tới Xì + Heo)";
+  if (hasThreeToAce && counts[15] >= 1) return "Sảnh rồng";
 
   let maxConsecutivePairs = 0;
   const distinctRanks = Object.keys(counts).map(Number).sort((a,b) => a-b);
