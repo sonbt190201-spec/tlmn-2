@@ -580,7 +580,18 @@ const App: React.FC = () => {
         )}
       </AnimatePresence>
 
-      <div className="bg-slate-900/80 backdrop-blur-xl border-t border-white/10 pt-2 pb-safe px-2 md:px-4 z-[100]">
+      <div className="bg-slate-900/80 backdrop-blur-xl border-t border-white/10 pt-2 pb-safe px-2 md:px-4 z-[100] relative">
+          {/* Turn Indicator for Local Player */}
+          {isMyTurn && gameState?.gamePhase === 'playing' && (
+            <motion.div 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="absolute -top-10 left-1/2 -translate-x-1/2 bg-emerald-500 text-white text-[10px] font-black px-4 py-1 rounded-full shadow-2xl z-[150] tracking-widest uppercase border border-emerald-400/50"
+            >
+              Lượt của bạn
+            </motion.div>
+          )}
+
           <div className="max-w-full mx-auto flex gap-2 md:gap-3 justify-start md:justify-center overflow-x-auto scrollbar-hide py-3 px-10">
              <AnimatePresence>
                {me?.hand?.map((c: any, idx: number) => (
@@ -614,6 +625,20 @@ const PlayerAvatar: React.FC<{ player: any, isTurn: boolean, onTroll: (type: Tro
   
   return (
     <div className={`relative p-1.5 rounded-2xl border-2 transition-all shadow-xl ${isTurn ? 'border-yellow-400 bg-yellow-500/20 scale-110' : 'border-white/5 bg-slate-900/80'}`}>
+      {/* Turn Indicator Badge */}
+      <AnimatePresence>
+        {isTurn && (
+          <motion.div 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 10 }}
+            className="absolute -top-8 left-1/2 -translate-x-1/2 bg-yellow-400 text-black text-[8px] font-black px-2 py-0.5 rounded-full shadow-lg whitespace-nowrap z-[60]"
+          >
+            <span className="animate-pulse">ĐANG ĐÁNH...</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="w-10 h-10 md:w-14 md:h-14 bg-slate-800 rounded-xl flex items-center justify-center text-xl font-black relative overflow-visible">
          {player.name ? player.name[0].toUpperCase() : '?'}
          {player.hand?.length > 0 && <div className="absolute top-0 right-0 bg-red-600 text-[8px] px-1.5 py-0.5 rounded-bl-md font-black">{player.hand.length}</div>}
