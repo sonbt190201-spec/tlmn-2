@@ -154,9 +154,15 @@ wss.on('connection', (ws) => {
             };
           }
           
+          // Gửi thông tin phòng cập nhật kèm số dư cho tất cả mọi người
+          const roomPlayersWithBalance = joinedRoom.playerInfos.map(p => ({
+            ...p,
+            balance: persistentPlayers[p.id]?.balance || 1000000
+          }));
+
           broadcast(joinedRoom, {
             type: 'ROOM_UPDATE',
-            payload: { players: joinedRoom.playerInfos, roomId: joinedRoom.id }
+            payload: { players: roomPlayersWithBalance, roomId: joinedRoom.id }
           });
 
           if (!joinedRoom.game) {
@@ -164,17 +170,12 @@ wss.on('connection', (ws) => {
              if (globalHistory[joinedRoom.id]) joinedRoom.game.setHistory(globalHistory[joinedRoom.id]);
           }
 
-          ws.send(JSON.stringify({
-            type: 'GAME_STATE',
-            payload: {
-               ...joinedRoom.game.getState(clientId),
-               globalStats: persistentPlayers[clientId].stats
-            }
-          }));
+          // Broadcast trạng thái game cho tất cả để cập nhật danh sách lobby
+          broadcastGameState(joinedRoom);
           break;
 
         case 'START_GAME':
-          if (room && (!room.game || room.game.gamePhase === 'finished')) {
+          if (room && (!room.game || room.game.gamePhase !== 'playing')) {
             const playersData = room.playerInfos.slice(0, 4).map(p => ({
               id: p.id,
               name: p.name,
@@ -300,9 +301,13 @@ wss.on('connection', (ws) => {
     const room = roomManager.leaveRoom(clientId);
     if (room) {
       if (room.game) room.game.removePlayer(clientId);
+      const roomPlayersWithBalance = room.playerInfos.map(p => ({
+        ...p,
+        balance: persistentPlayers[p.id]?.balance || 1000000
+      }));
       broadcast(room, {
         type: 'ROOM_UPDATE',
-        payload: { players: room.playerInfos, roomId: room.id }
+        payload: { players: roomPlayersWithBalance, roomId: room.id }
       });
       if (room.game) broadcastGameState(room);
     }
@@ -340,3 +345,4 @@ app.get('*', (req, res) => {
     else res.status(404).send('Vui lòng chạy build.');
   }
 });
+
