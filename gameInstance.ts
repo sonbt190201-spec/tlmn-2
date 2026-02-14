@@ -1,6 +1,6 @@
 
-import { Card, Player, Move, HandType, GameHistory, PlayerHistoryEntry, PayoutResult, GameEventRecord } from './types.js';
-import { detectHandType, compareHands, sortCards, checkInstantWin, getCardWeight } from './ruleValidator.js';
+import { Card, Player, Move, HandType, GameHistory, PlayerHistoryEntry, PayoutResult, GameEventRecord, MoneyChangeType } from './types.js';
+import { detectHandType, compareHands, sortCards, checkInstantWin } from './ruleValidator.js';
 import { dealCards } from './deckManager.js';
 import { MoneyEngine } from './moneyEngine.js';
 
@@ -36,12 +36,19 @@ export class GameInstance {
       isBurned: false,
       penalties: []
     }));
-    this.bet = initialBet;
+    this.bet = initialBet || 10000;
     this.currentTurn = 0;
     this.lastMove = null;
     this.gamePhase = "waiting";
     this.isFirstGame = true;
     this.startingPlayerId = null;
+  }
+
+  // Khôi phục lịch sử từ file (nếu có)
+  setHistory(history: GameHistory[]) {
+    if (Array.isArray(history)) {
+      this.history = history;
+    }
   }
 
   removePlayer(playerId: string) {
@@ -62,9 +69,11 @@ export class GameInstance {
   }
 
   setPersistentState(state: { isFirstGame: boolean, lastWasInstantWin: boolean, startingPlayerId: string | null }) {
-    this.isFirstGame = state.isFirstGame;
-    this.lastWasInstantWin = state.lastWasInstantWin;
-    this.startingPlayerId = state.startingPlayerId;
+    if (state) {
+      this.isFirstGame = state.isFirstGame ?? this.isFirstGame;
+      this.lastWasInstantWin = state.lastWasInstantWin ?? this.lastWasInstantWin;
+      this.startingPlayerId = state.startingPlayerId ?? this.startingPlayerId;
+    }
   }
 
   startNewRound() {
@@ -130,7 +139,8 @@ export class GameInstance {
     this.roundEvents.push({
       type: 'INSTANT_WIN',
       playerName: winner.name,
-      description: `Ăn trắng: ${reason}`
+      description: `Ăn trắng: ${reason}`,
+      timestamp: Date.now()
     });
 
     this.gamePhase = "finished";
@@ -243,8 +253,11 @@ export class GameInstance {
         type: this.chopChain.length > 1 ? 'OVER_CHOP' : 'CHOP',
         fromPlayerId: ultimateVictimId,
         toPlayerId: ultimateWinnerId,
+        playerName: winner.name,
+        targetName: victim.name,
         amount: totalValue,
-        description: `${winner.name} chặt ${victim.name} thu ${totalValue}$`
+        description: `${winner.name} chặt ${victim.name} thu ${totalValue}$`,
+        timestamp: Date.now()
       };
       this.roundEvents.push(event);
 
@@ -312,7 +325,8 @@ export class GameInstance {
           this.roundEvents.push({
             type: 'CONG',
             playerName: p.name,
-            description: `${p.name} bị cóng!`
+            description: `${p.name} bị cóng!`,
+            timestamp: Date.now()
           });
         }
       });
@@ -337,7 +351,6 @@ export class GameInstance {
   endRound() {
     if (this.gamePhase === "finished") return;
     
-    // Resolve any remaining chop chain (just in case)
     this.resolveChopChain();
 
     this.gamePhase = "finished";
@@ -354,16 +367,24 @@ export class GameInstance {
       rankPayouts = MoneyEngine.calculateRankMoney(this.players, this.bet);
     }
 
-    // Apply Rank Money
     rankPayouts.forEach(pay => {
       const p = this.players.find(pl => pl.id === pay.playerId);
       if (p) {
         p.balance += pay.change;
         this.lastPayouts.push(pay);
+        
+        if (p.id === this.startingPlayerId) {
+          this.roundEvents.push({
+            type: 'RANK',
+            playerName: p.name,
+            description: `${p.name} thắng ván - Nhận ${pay.change}$`,
+            amount: pay.change,
+            timestamp: Date.now()
+          });
+        }
       }
     });
 
-    // Handle Thối bài
     const winner = this.players.find(p => p.id === this.startingPlayerId);
     const pRank3 = this.players.find(p => p.finishedRank === 3);
 
@@ -381,13 +402,17 @@ export class GameInstance {
           p.balance -= thui.totalLoss;
           receiver.balance += thui.totalLoss;
           
-          this.roundEvents.push({
+          const event: GameEventRecord = {
             type: 'THOI',
             fromPlayerId: p.id,
             toPlayerId: receiver.id,
+            playerName: receiver.name,
+            targetName: p.name,
             amount: thui.totalLoss,
-            description: `${p.name} thúi bài (${thui.details.join(', ')}) đền ${thui.totalLoss}$`
-          });
+            description: `${p.name} thúi bài (${thui.details.join(', ')}) đền ${thui.totalLoss}$ cho ${receiver.name}`,
+            timestamp: Date.now()
+          };
+          this.roundEvents.push(event);
 
           this.lastPayouts.push({ playerId: p.id, change: -thui.totalLoss, reason: `Thối ${thui.details.join(', ')}` });
           this.lastPayouts.push({ playerId: receiver.id, change: thui.totalLoss, reason: `Ăn thối từ ${p.name}` });
@@ -395,7 +420,6 @@ export class GameInstance {
       }
     });
 
-    // CRITICAL: Always record history at the very end
     this.recordHistory();
   }
 
@@ -428,7 +452,8 @@ export class GameInstance {
       events: [...this.roundEvents]
     });
     
-    // Clear temporary data for next round
+    if (this.history.length > 100) this.history = this.history.slice(0, 100);
+
     this.lastPayouts = [];
     this.roundEvents = [];
   }
@@ -444,8 +469,7 @@ export class GameInstance {
       gamePhase: this.gamePhase,
       bet: this.bet,
       passedPlayers: Array.from(this.passedPlayers),
-      history: this.history,
-      lastPayouts: this.lastPayouts
+      history: this.history
     };
   }
 
