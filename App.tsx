@@ -464,7 +464,6 @@ const App: React.FC = () => {
         setSpecialEventQueue(prev => [...prev, { ...data.payload, id: Math.random().toString(36).substr(2, 9) }]);
       }
       else if (data.type === 'ERROR') {
-        // Cải thiện thông báo lỗi đánh bài
         setSpecialEventQueue(prev => [...prev, { id: 'err-'+Date.now(), type: 'info', playerName: 'LỖI: ' + data.payload.toUpperCase() }]);
       }
     };
@@ -485,13 +484,11 @@ const App: React.FC = () => {
     await unlockAudio();
     playSfx('play');
     ws?.send(JSON.stringify({ type: 'PLAY_CARDS', payload: { cardIds: selectedCards } }));
-    // Không reset ngay để nếu server báo lỗi người chơi vẫn thấy bài đang chọn
-    // setSelectedCards([]);
   };
 
-  // Reset bài chọn khi gameState thay đổi (đã đánh thành công)
+  // SỬA LỖI QUAN TRỌNG: Xóa bài đã chọn khi lượt chơi thay đổi hoặc reset vòng (lastMove là null)
   useEffect(() => {
-    if (gameState?.lastMove?.playerId === myId) {
+    if (gameState?.lastMove?.playerId === myId || gameState?.lastMove === null) {
       setSelectedCards([]);
     }
   }, [gameState?.lastMove, myId]);
@@ -499,10 +496,8 @@ const App: React.FC = () => {
   const orderedPlayers = useMemo(() => {
     const playersInGame = gameState?.players || [];
     const playersInRoom = roomInfo?.players || [];
-    
     let basePlayers = (playersInGame.length > 0) ? playersInGame : playersInRoom;
     if (basePlayers.length === 0) return [];
-    
     const myIndex = basePlayers.findIndex((p: any) => p.id === myId);
     if (myIndex === -1) return basePlayers;
     return [...basePlayers.slice(myIndex), ...basePlayers.slice(0, myIndex)];
@@ -556,17 +551,13 @@ const App: React.FC = () => {
   return (
     <div className="h-screen h-[100dvh] bg-slate-950 relative overflow-hidden flex flex-col font-sans select-none">
       <div ref={remoteAudioContainerRef} className="hidden pointer-events-none" />
-      
       <TrollModule activeTrolls={activeTrolls} playerPositions={playerPositions} />
-
       <div className="absolute top-4 right-4 flex gap-2 z-[200]">
         <button onClick={async () => { await unlockAudio(); playSfx('click'); setShowSettings(true); }} className="bg-slate-900/80 border border-white/10 p-3 rounded-2xl flex items-center gap-2 hover:bg-slate-800 transition-all active:scale-95 shadow-xl backdrop-blur-md">
           <span className="text-sm">⚙️</span><span className="text-[10px] font-black text-white uppercase hidden md:inline">Cài đặt</span>
         </button>
       </div>
-
       <ChatModule messages={messages} onSendMessage={(m) => ws?.send(JSON.stringify({ type: 'SEND_CHAT', payload: { message: m } }))} myId={myId} />
-      
       <div className={`flex-1 relative ${isLandscape ? 'landscape-scale' : ''}`}>
          <div className="absolute inset-0 z-[50] pointer-events-none">
            {orderedPlayers.slice(1).map((p: any) => (
@@ -575,7 +566,6 @@ const App: React.FC = () => {
              </div>
            ))}
          </div>
-
          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-[10]">
             <div className={`w-[85vw] md:w-[60vw] h-[30vh] md:h-[40vh] bg-emerald-900/40 rounded-[100px] border-[2px] border-emerald-500/30 flex items-center justify-center shadow-[inset_0_0_50px_rgba(0,0,0,0.5)] relative ${isLandscape ? 'scale-90' : ''}`}>
                <div className="flex gap-1 scale-75 md:scale-100">
@@ -591,51 +581,26 @@ const App: React.FC = () => {
             </div>
          </div>
       </div>
-
       <AnimatePresence>
         {currentEffect?.type === 'chat_heo' && (
-          <ChopEffect 
-            key={currentEffect.id} 
-            isChopHeo={true} 
-            chopType={currentEffect.chopType || 'three_pairs'} 
-            onComplete={onEffectComplete} 
-          />
+          <ChopEffect key={currentEffect.id} isChopHeo={true} chopType={currentEffect.chopType || 'three_pairs'} onComplete={onEffectComplete} />
         )}
         {currentEffect?.type === 'chat_chong' && (
-          <OverChopEffect 
-            key={currentEffect.id} 
-            isOverChop={true} 
-            onComplete={onEffectComplete} 
-          />
+          <OverChopEffect key={currentEffect.id} isOverChop={true} onComplete={onEffectComplete} />
         )}
         {['thui_heo', 'thui_3_doi_thong', 'thui_tu_quy', 'chay_bai', 'info', 'three_spade_win'].includes(currentEffect?.type) && (
-          <SpecialEventAnnouncer 
-            key={currentEffect.id}
-            event={currentEffect} 
-            onComplete={onEffectComplete} 
-          />
+          <SpecialEventAnnouncer key={currentEffect.id} event={currentEffect} onComplete={onEffectComplete} />
         )}
-        
         {gameState?.gamePhase === 'finished' && me?.finishedRank && (
-          <RankEffect 
-            key={'rank-'+me.id} 
-            rank={me.finishedRank as any} 
-            playerName={me.name} 
-          />
+          <RankEffect key={'rank-'+me.id} rank={me.finishedRank as any} playerName={me.name} />
         )}
       </AnimatePresence>
-
       <div className="bg-slate-900/80 backdrop-blur-xl border-t border-white/10 pt-2 pb-safe px-2 md:px-4 z-[100] relative">
           {isMyTurn && gameState?.gamePhase === 'playing' && (
-            <motion.div 
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="absolute -top-10 left-1/2 -translate-x-1/2 bg-emerald-500 text-white text-[10px] font-black px-4 py-1 rounded-full shadow-2xl z-[150] tracking-widest uppercase border border-emerald-400/50"
-            >
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="absolute -top-10 left-1/2 -translate-x-1/2 bg-emerald-500 text-white text-[10px] font-black px-4 py-1 rounded-full shadow-2xl z-[150] tracking-widest uppercase border border-emerald-400/50">
               Lượt của bạn
             </motion.div>
           )}
-
           <div className="max-w-full mx-auto flex -space-x-1 md:-space-x-2 justify-center overflow-x-auto scrollbar-hide py-3 px-10">
              <AnimatePresence>
                {me?.hand?.map((c: any, idx: number) => (
@@ -655,7 +620,6 @@ const App: React.FC = () => {
              )}
           </div>
       </div>
-      
       <AnimatePresence>
         {showHistory && <HistoryModal history={gameState?.history || []} stats={gameState?.globalStats} onClose={() => setShowHistory(false)} />}
         {showSettings && <SettingsModal currentBet={gameState?.bet || 10000} onUpdate={(bet) => ws?.send(JSON.stringify({ type: 'UPDATE_BET', payload: { bet } }))} onClose={() => setShowSettings(false)} onOpenHistory={() => { setShowSettings(false); setShowHistory(true); }} />}
@@ -666,56 +630,26 @@ const App: React.FC = () => {
 
 const PlayerAvatar: React.FC<{ player: any, isTurn: boolean, onTroll: (type: TrollType) => void }> = ({ player, isTurn, onTroll }) => {
   const [showTrollPanel, setShowTrollPanel] = useState(false);
-  
   return (
     <div className={`relative p-1.5 rounded-2xl border-2 transition-all shadow-xl ${isTurn ? 'border-yellow-400 bg-yellow-500/20 scale-110' : 'border-white/5 bg-slate-900/80'}`}>
       <AnimatePresence>
         {isTurn && (
-          <motion.div 
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 10 }}
-            className="absolute -top-8 left-1/2 -translate-x-1/2 bg-yellow-400 text-black text-[8px] font-black px-2 py-0.5 rounded-full shadow-lg whitespace-nowrap z-[60]"
-          >
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="absolute -top-8 left-1/2 -translate-x-1/2 bg-yellow-400 text-black text-[8px] font-black px-2 py-0.5 rounded-full shadow-lg whitespace-nowrap z-[60]">
             <span className="animate-pulse">ĐANG ĐÁNH...</span>
           </motion.div>
         )}
       </AnimatePresence>
-
       <div className="w-10 h-10 md:w-14 md:h-14 bg-slate-800 rounded-xl flex items-center justify-center text-xl font-black relative overflow-visible">
          {player.name ? player.name[0].toUpperCase() : '?'}
          {player.hand?.length > 0 && <div className="absolute top-0 right-0 bg-red-600 text-[8px] px-1.5 py-0.5 rounded-bl-md font-black">{player.hand.length}</div>}
-         
-         <motion.button 
-           whileHover={{ scale: 1.15 }}
-           whileTap={{ scale: 0.9 }}
-           onClick={async (e) => { e.stopPropagation(); await unlockAudio(); setShowTrollPanel(!showTrollPanel); }}
-           className="absolute -bottom-2 -right-2 w-8 h-8 bg-slate-700/90 rounded-full flex items-center justify-center text-sm border border-white/20 shadow-2xl active:scale-90 z-[50]"
-         >
+         <motion.button whileHover={{ scale: 1.15 }} whileTap={{ scale: 0.9 }} onClick={async (e) => { e.stopPropagation(); await unlockAudio(); setShowTrollPanel(!showTrollPanel); }} className="absolute -bottom-2 -right-2 w-8 h-8 bg-slate-700/90 rounded-full flex items-center justify-center text-sm border border-white/20 shadow-2xl active:scale-90 z-[50]">
            🖕
          </motion.button>
-
          <AnimatePresence>
            {showTrollPanel && (
-             <motion.div 
-               initial={{ opacity: 0, scale: 0.5, y: -10 }}
-               animate={{ opacity: 1, scale: 1, y: 0 }}
-               exit={{ opacity: 0, scale: 0.5, y: -10 }}
-               className="absolute top-full left-0 mt-2 bg-slate-800/95 backdrop-blur-md border border-white/20 rounded-2xl p-2 flex gap-3 z-[300] shadow-2xl pointer-events-auto"
-             >
+             <motion.div initial={{ opacity: 0, scale: 0.5, y: -10 }} animate={{ opacity: 1, scale: 1, y: 0 }} exit={{ opacity: 0, scale: 0.5, y: -10 }} className="absolute top-full left-0 mt-2 bg-slate-800/95 backdrop-blur-md border border-white/20 rounded-2xl p-2 flex gap-3 z-[300] shadow-2xl pointer-events-auto">
                 {(['stone', 'tomato', 'bomb', 'water', 'egg'] as TrollType[]).map(t => (
-                  <motion.button 
-                    key={t} 
-                    whileHover={{ scale: 1.2 }}
-                    whileTap={{ scale: 0.8 }}
-                    onClick={async (e) => { 
-                      e.stopPropagation(); 
-                      await unlockAudio(); 
-                      onTroll(t); 
-                      setShowTrollPanel(false); 
-                    }} 
-                    className="text-xl"
-                  >
+                  <motion.button key={t} whileHover={{ scale: 1.2 }} whileTap={{ scale: 0.8 }} onClick={async (e) => { e.stopPropagation(); await unlockAudio(); onTroll(t); setShowTrollPanel(false); }} className="text-xl">
                     {t === 'stone' ? '🪨' : t === 'tomato' ? '🍅' : t === 'bomb' ? '💣' : t === 'water' ? '🪣' : '🥚'}
                   </motion.button>
                 ))}
