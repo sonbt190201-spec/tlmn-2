@@ -66,9 +66,10 @@ const playOverChopSoundSynth = () => {
 const OverChopEffect: React.FC<OverChopEffectProps> = ({ isOverChop, victimId, onComplete }) => {
   useEffect(() => {
     playOverChopSoundSynth();
+    // Tăng thời gian hiển thị lên 5000ms (5 giây)
     const timer = setTimeout(() => {
       onComplete?.();
-    }, 2500);
+    }, 5000);
     return () => clearTimeout(timer);
   }, [onComplete]);
 

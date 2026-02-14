@@ -53,8 +53,9 @@ const SpecialEventAnnouncer: React.FC<SpecialEventAnnouncerProps> = ({ event, on
     if (event) {
       if (event.type !== 'info') playApplauseSound();
       
-      // Tổng thời gian hiển thị: 2.5s (300ms in + 1900ms hold + 300ms out)
-      const holdTime = event.type === 'info' ? 1200 : 2200;
+      // Tăng holdTime lên 5000ms (5 giây) cho tất cả các loại sự kiện quan trọng.
+      // Riêng 'info' có thể giữ ngắn hơn một chút hoặc cũng 5s tùy ý, ở đây mình để đồng nhất là 5s cho yêu cầu.
+      const holdTime = 5000;
       const timer = setTimeout(onComplete, holdTime);
       return () => clearTimeout(timer);
     }

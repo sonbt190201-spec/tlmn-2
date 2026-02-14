@@ -581,7 +581,7 @@ const App: React.FC = () => {
       </AnimatePresence>
 
       <div className="bg-slate-900/80 backdrop-blur-xl border-t border-white/10 pt-2 pb-safe px-2 md:px-4 z-[100]">
-          <div className="max-w-full mx-auto flex -space-x-5 md:-space-x-8 justify-center overflow-x-auto scrollbar-hide py-3 px-10">
+          <div className="max-w-full mx-auto flex gap-2 md:gap-3 justify-start md:justify-center overflow-x-auto scrollbar-hide py-3 px-10">
              <AnimatePresence>
                {me?.hand?.map((c: any, idx: number) => (
                  <CardComponent key={c.id || idx} card={c} isDealing={dealingCards} index={idx} isSelected={selectedCards.includes(c?.id)} onClick={() => setSelectedCards(prev => prev.includes(c.id) ? prev.filter(id => id !== c.id) : [...prev, c.id])} />
@@ -622,7 +622,7 @@ const PlayerAvatar: React.FC<{ player: any, isTurn: boolean, onTroll: (type: Tro
            whileHover={{ scale: 1.15 }}
            whileTap={{ scale: 0.9 }}
            onClick={async (e) => { e.stopPropagation(); await unlockAudio(); setShowTrollPanel(!showTrollPanel); }}
-           className="absolute -top-3 -left-3 w-8 h-8 bg-slate-700/90 rounded-full flex items-center justify-center text-sm border border-white/20 shadow-2xl active:scale-90 z-[50]"
+           className="absolute -bottom-2 -right-2 w-8 h-8 bg-slate-700/90 rounded-full flex items-center justify-center text-sm border border-white/20 shadow-2xl active:scale-90 z-[50]"
          >
            🖕
          </motion.button>

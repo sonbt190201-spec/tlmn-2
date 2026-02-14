@@ -33,9 +33,7 @@ const playChopSoundSynth = (type: ChopType) => {
   noiseFilter.Q.value = 10;
   const noiseGain = ctx.createGain();
   noiseGain.gain.setValueAtTime(0, now);
-  // Fix: Call linearRampToValueAtTime on .gain AudioParam
   noiseGain.gain.linearRampToValueAtTime(0.3, now + 0.1);
-  // Fix: Call exponentialRampToValueAtTime on .gain AudioParam
   noiseGain.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
   noiseFilter.frequency.setValueAtTime(200, now);
   noiseFilter.frequency.exponentialRampToValueAtTime(2000, now + 0.2);
@@ -75,9 +73,7 @@ const playChopSoundSynth = (type: ChopType) => {
     metal.type = 'square';
     metal.frequency.setValueAtTime(1200, now + 0.11);
     metalGain.gain.setValueAtTime(0, now + 0.11);
-    // Fix: Call linearRampToValueAtTime on .gain AudioParam
     metalGain.gain.linearRampToValueAtTime(0.2, now + 0.12);
-    // Fix: Call exponentialRampToValueAtTime on .gain AudioParam
     metalGain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
     metal.connect(metalGain);
     metalGain.connect(master);
@@ -88,13 +84,12 @@ const playChopSoundSynth = (type: ChopType) => {
 
 const ChopEffect: React.FC<ChopEffectProps> = ({ isChopHeo, chopType, onComplete }) => {
   useEffect(() => {
-    // Luôn chạy âm thanh khi component mount
     playChopSoundSynth(chopType);
     
-    // Tự động báo hoàn thành sau 2.5s để App xóa khỏi Queue
+    // Tăng thời gian hiển thị lên 5000ms (5 giây)
     const timer = setTimeout(() => {
       onComplete?.();
-    }, 2500);
+    }, 5000);
     
     return () => clearTimeout(timer);
   }, [chopType, onComplete]);
