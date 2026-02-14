@@ -1,6 +1,6 @@
 
 import { Card, Player, Move, HandType, GameHistory, PlayerHistoryEntry, PayoutResult, GameEventRecord } from './types.js';
-import { detectHandType, compareHands, sortCards, checkInstantWin } from './ruleValidator.js';
+import { detectHandType, compareHands, sortCards, checkInstantWin, getCardWeight } from './ruleValidator.js';
 import { dealCards } from './deckManager.js';
 import { MoneyEngine } from './moneyEngine.js';
 
@@ -33,6 +33,7 @@ export class GameInstance {
   private roundEvents: GameEventRecord[] = [];
   private lastWasInstantWin: boolean = false;
   private isFirstMoveOfGame: boolean = false; 
+  private smallestCardIdInGame: string = ''; // Lưu ID quân bài nhỏ nhất ván đầu
   
   private chopChain: { attackerId: string, victimId: string, value: number }[] = [];
 
@@ -80,7 +81,10 @@ export class GameInstance {
     this.lastPayouts = [];
     this.chopChain = [];
     this.roundEvents = [];
-    this.isFirstMoveOfGame = this.isFirstGame; 
+    
+    // Áp dụng luật ván đầu nếu là ván đầu HOẶC ván trước ăn trắng
+    this.isFirstMoveOfGame = this.isFirstGame || this.lastWasInstantWin; 
+    this.smallestCardIdInGame = '';
 
     this.players.forEach(p => {
       const handData = hands.find(h => h.playerId === p.id);
@@ -99,8 +103,22 @@ export class GameInstance {
     }
 
     if (this.isFirstGame || this.lastWasInstantWin) {
-      const starterIdx = this.players.findIndex(p => p.hand.some(c => c.rank === 3 && c.suit === 'spade'));
-      this.currentTurn = starterIdx !== -1 ? starterIdx : 0;
+      // Tìm quân bài nhỏ nhất thực tế có trong tay các người chơi
+      let minWeight = Infinity;
+      let starterIdx = 0;
+      
+      this.players.forEach((p, idx) => {
+        p.hand.forEach(c => {
+          const w = getCardWeight(c);
+          if (w < minWeight) {
+            minWeight = w;
+            starterIdx = idx;
+            this.smallestCardIdInGame = c.id;
+          }
+        });
+      });
+      
+      this.currentTurn = starterIdx;
     } else if (this.startingPlayerId) {
       const idx = this.players.findIndex(p => p.id === this.startingPlayerId);
       this.currentTurn = idx !== -1 ? idx : 0;
@@ -126,7 +144,7 @@ export class GameInstance {
     this.gamePhase = "finished";
     this.startingPlayerId = winnerId;
     this.isFirstGame = false;
-    this.lastWasInstantWin = true; 
+    this.lastWasInstantWin = true; // Đánh dấu để ván sau áp dụng luật ván đầu
     this.recordHistory();
   }
 
@@ -138,9 +156,12 @@ export class GameInstance {
     const cards = player.hand.filter(c => cardIds.includes(c.id));
     if (cards.length !== cardIds.length) return { error: "Bài không hợp lệ" };
 
-    if (this.isFirstMoveOfGame) {
-      const hasThreeSpade = cards.some(c => c.rank === 3 && c.suit === 'spade');
-      if (!hasThreeSpade) return { error: "Ván đầu tiên bắt buộc phải đánh lá 3 Bích (3♠)!" };
+    // LUẬT 3 BÍCH (HOẶC QUÂN NHỎ NHẤT) CHO VÁN ĐẦU TIÊN HOẶC SAU ĂN TRẮNG
+    if (this.isFirstMoveOfGame && this.smallestCardIdInGame) {
+      const hasSmallestCard = cards.some(c => c.id === this.smallestCardIdInGame);
+      if (!hasSmallestCard) {
+        return { error: `Ván này áp dụng luật ván đầu: Bắt buộc phải đánh quân bài nhỏ nhất đang có!` };
+      }
     }
 
     const handType = detectHandType(cards);
@@ -149,7 +170,6 @@ export class GameInstance {
     const isFourPairs = handType === HandType.FOUR_CONSECUTIVE_PAIRS;
     const isFreeChop = isFourPairs && this.lastMove && compareHands(cards, this.lastMove.cards) === 1;
 
-    // Kiểm tra lượt: Người chơi phải đúng lượt HOẶC đang chặt tự do (4 đôi thông)
     if (this.players[this.currentTurn].id !== playerId && !isFreeChop) {
       return { error: "Chưa tới lượt" };
     }
@@ -187,7 +207,6 @@ export class GameInstance {
         player.hand = player.hand.filter(c => !cardIds.includes(c.id));
         player.hasPlayedAnyCard = true;
         
-        // Reset trạng thái bỏ lượt vì có chặt
         this.passedPlayers.clear();
         this.lastMove = { type: handType, cards, playerId, timestamp: Date.now() };
         this.currentTurn = this.players.findIndex(p => p.id === playerId);
@@ -246,12 +265,9 @@ export class GameInstance {
   private moveToNextPlayer() {
     if (this.gamePhase !== "playing") return;
 
-    // LUẬT CỐT LÕI: Kiểm tra xem vòng chơi đã kết thúc chưa.
-    // Vòng kết thúc khi TẤT CẢ người chơi ACTIVE (ngoại trừ người đang giữ bài cao nhất) đã bỏ lượt.
     const activePlayers = this.players.filter(p => !this.finishedPlayers.includes(p.id));
     const ownerId = this.lastMove?.playerId;
     
-    // Đối thủ ACTIVE là những người chưa về bài và không phải người đánh lá bài hiện tại
     const activeOpponents = activePlayers.filter(p => p.id !== ownerId);
     const allOpponentsPassed = activeOpponents.every(p => this.passedPlayers.has(p.id));
 
@@ -260,7 +276,6 @@ export class GameInstance {
       return;
     }
 
-    // Nếu vòng chưa kết thúc, tìm người chơi ACTIVE tiếp theo chưa bỏ lượt
     const playerCount = this.players.length;
     let nextIdx = (this.currentTurn + 1) % playerCount;
 
@@ -269,7 +284,6 @@ export class GameInstance {
       const isFinished = this.finishedPlayers.includes(p.id);
       const hasPassed = this.passedPlayers.has(p.id);
 
-      // Nếu đã quay lại chính chủ bài mà vòng chưa reset (do lỗi logic nào đó) -> Reset
       if (ownerId && p.id === ownerId) {
         this.resetRound(ownerId);
         return;
@@ -282,7 +296,6 @@ export class GameInstance {
       nextIdx = (nextIdx + 1) % playerCount;
     }
 
-    // Trường hợp xấu nhất nếu không tìm thấy ai, reset về chủ bài
     if (ownerId) this.resetRound(ownerId);
   }
 
@@ -293,8 +306,6 @@ export class GameInstance {
     
     let leadIdx = this.players.findIndex(p => p.id === winnerId);
     
-    // Nếu người thắng vòng chơi đã về (FINISHED), quyền đánh vòng mới (LEAD)
-    // sẽ thuộc về người chơi ACTIVE kế tiếp theo vòng tròn.
     if (this.finishedPlayers.includes(winnerId)) {
       const playerCount = this.players.length;
       let nextIdx = (leadIdx + 1) % playerCount;
@@ -315,8 +326,6 @@ export class GameInstance {
     this.finishedPlayers.push(player.id);
     player.finishedRank = this.finishedPlayers.length;
 
-    // KHÔNG reset lastMove ở đây. Lá bài cuối vẫn có thể bị chặn bởi những người ACTIVE khác.
-
     if (player.finishedRank === 1) {
       this.players.forEach(p => {
         if (p.id !== player.id && !p.hasPlayedAnyCard) {
@@ -328,7 +337,6 @@ export class GameInstance {
 
     const remainingCount = this.players.filter(p => !this.finishedPlayers.includes(p.id)).length;
     if (remainingCount <= 1) {
-      // Kết thúc ván nếu chỉ còn 1 hoặc 0 người chơi
       this.players.forEach(p => { 
         if(!this.finishedPlayers.includes(p.id)) { 
           this.finishedPlayers.push(p.id); 
@@ -346,7 +354,7 @@ export class GameInstance {
     this.resolveChopChain();
     this.gamePhase = "finished";
     this.isFirstGame = false;
-    this.lastWasInstantWin = false;
+    this.lastWasInstantWin = false; // Reset sau một ván chơi bình thường
     this.startingPlayerId = this.finishedPlayers[0];
 
     const settlements = MoneyEngine.settleGame(this.players, this.bet);
