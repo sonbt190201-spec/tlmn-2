@@ -29,11 +29,17 @@ const unlockAudio = async () => {
   if (ctx.state === 'suspended') {
     await ctx.resume();
   }
+  // Tạo buffer im lặng để kích hoạt âm thanh trên iOS/Android
   const buffer = ctx.createBuffer(1, 1, 22050);
   const source = ctx.createBufferSource();
   source.buffer = buffer;
   source.connect(ctx.destination);
   source.start(0);
+  
+  // Thử phát tất cả các thẻ audio đang bị treo
+  document.querySelectorAll('audio').forEach(audio => {
+    audio.play().catch(() => {});
+  });
 };
 // MOBILE AUDIO FIX END
 
@@ -67,7 +73,8 @@ const playSfx = (type: 'play' | 'pass' | 'deal' | 'click' | 'win') => {
   if (ctx.state === 'suspended') ctx.resume();
   const now = ctx.currentTime;
   const master = ctx.createGain();
-  master.gain.value = 0.8;
+  // TĂNG ÂM LƯỢNG SFX TỐI ĐA
+  master.gain.value = 1.8; 
   master.connect(ctx.destination);
 
   switch (type) {
@@ -79,7 +86,7 @@ const playSfx = (type: 'play' | 'pass' | 'deal' | 'click' | 'win') => {
         oscD.type = 'sine';
         oscD.frequency.setValueAtTime(800 + (i * 20), time);
         oscD.frequency.exponentialRampToValueAtTime(400, time + 0.05);
-        gD.gain.setValueAtTime(0.1, time);
+        gD.gain.setValueAtTime(0.2, time);
         gD.gain.exponentialRampToValueAtTime(0.01, time + 0.05);
         oscD.connect(gD); gD.connect(master);
         oscD.start(time); oscD.stop(time + 0.05);
@@ -91,7 +98,7 @@ const playSfx = (type: 'play' | 'pass' | 'deal' | 'click' | 'win') => {
       oscP.type = 'triangle';
       oscP.frequency.setValueAtTime(150, now);
       oscP.frequency.exponentialRampToValueAtTime(60, now + 0.15);
-      gP.gain.setValueAtTime(0.5, now);
+      gP.gain.setValueAtTime(0.8, now);
       gP.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
       oscP.connect(gP); gP.connect(master);
       oscP.start(); oscP.stop(now + 0.15);
@@ -102,7 +109,7 @@ const playSfx = (type: 'play' | 'pass' | 'deal' | 'click' | 'win') => {
       oscS.type = 'sine';
       oscS.frequency.setValueAtTime(300, now);
       oscS.frequency.linearRampToValueAtTime(500, now + 0.2);
-      gS.gain.setValueAtTime(0.1, now);
+      gS.gain.setValueAtTime(0.3, now);
       gS.gain.linearRampToValueAtTime(0, now + 0.2);
       oscS.connect(gS); gS.connect(master);
       oscS.start(); oscS.stop(now + 0.2);
@@ -112,7 +119,7 @@ const playSfx = (type: 'play' | 'pass' | 'deal' | 'click' | 'win') => {
       const gC = ctx.createGain();
       oscC.type = 'sine';
       oscC.frequency.setValueAtTime(1200, now);
-      gC.gain.setValueAtTime(0.1, now);
+      gC.gain.setValueAtTime(0.3, now);
       gC.gain.exponentialRampToValueAtTime(0.01, now + 0.05);
       oscC.connect(gC); gC.connect(master);
       oscC.start(); oscC.stop(now + 0.05);
@@ -363,15 +370,10 @@ const App: React.FC = () => {
   const getOrCreatePeer = (targetId: string, socket: WebSocket) => {
     if (peersRef.current[targetId]) return peersRef.current[targetId];
     
-    // Nâng cấp RTCPeerConnection để hoạt động qua Internet
     const pc = new RTCPeerConnection({
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
-        { urls: 'stun:stun2.l.google.com:19302' },
-        { urls: 'stun:stun3.l.google.com:19302' },
-        { urls: 'stun:stun4.l.google.com:19302' },
-        // Cấu hình TURN server placeholder (người dùng có thể thay thế bằng thông tin thật)
         {
           urls: 'turn:openrelay.metered.ca:80',
           username: 'openrelayproject',
@@ -400,11 +402,15 @@ const App: React.FC = () => {
         audio.autoplay = true;
         audio.setAttribute('playsinline', 'true');
         audio.muted = false;
+        audio.volume = 1.0;
         remoteAudioContainerRef.current?.appendChild(audio);
       }
       audio.srcObject = e.streams[0];
-      // Đảm bảo audio được phát kể cả trên thiết bị di động
-      audio.play().catch(err => console.debug("Autoplay deferred or failed", err));
+      // FIX VOICE: Thử phát lại ngay khi có track
+      audio.play().catch(err => {
+         console.debug("Autoplay deferred, waiting for user interaction", err);
+         // Thêm nút bấm khẩn cấp nếu cần (ẩn)
+      });
     };
 
     if (localStreamRef.current) {
@@ -455,7 +461,6 @@ const App: React.FC = () => {
   useEffect(() => {
     const host = window.location.host;
     if (!host) return;
-    // Tự động chuyển đổi giữa ws:// và wss:// dựa trên giao thức hiện tại (http vs https)
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const wsUrl = `${protocol}//${host}`;
     let socket: WebSocket;
@@ -558,7 +563,7 @@ const App: React.FC = () => {
   const currentEffect = specialEventQueue[0] || null;
 
   return (
-    <div className="h-screen h-[100dvh] bg-slate-950 relative overflow-hidden flex flex-col font-sans select-none">
+    <div className="h-screen h-[100dvh] bg-slate-950 relative overflow-hidden flex flex-col font-sans select-none" onClick={unlockAudio}>
       <div ref={remoteAudioContainerRef} className="hidden pointer-events-none" />
       
       <div className="absolute top-4 right-4 flex gap-2 z-[200]">
@@ -575,7 +580,7 @@ const App: React.FC = () => {
 
       <ChatModule messages={messages} onSendMessage={(m) => ws?.send(JSON.stringify({ type: 'SEND_CHAT', payload: { message: m } }))} myId={myId} />
       
-      <div className="flex-1 relative">
+      <div className="flex-1 relative min-h-0">
          <div className="absolute inset-0 z-[2000] pointer-events-none">
            {orderedPlayers.slice(1).map((p: any, idx: number) => {
              const pos = playerPositions[p.id];
@@ -602,8 +607,8 @@ const App: React.FC = () => {
            })}
          </div>
 
-         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-[10]">
-            <div className="w-[85vw] md:w-[60vw] h-[30vh] md:h-[40vh] landscape:h-[50vh] landscape:w-[50vw] bg-emerald-900/40 rounded-[100px] border-[2px] border-emerald-500/30 flex items-center justify-center shadow-[inset_0_0_50px_rgba(0,0,0,0.5)] relative">
+         <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-[10] py-4">
+            <div className="w-[85vw] md:w-[60vw] h-[25vh] md:h-[40vh] landscape:h-[45vh] landscape:w-[50vw] bg-emerald-900/40 rounded-[100px] border-[2px] border-emerald-500/30 flex items-center justify-center shadow-[inset_0_0_50px_rgba(0,0,0,0.5)] relative">
                <div className="flex gap-1 scale-75 md:scale-100 landscape:scale-90">
                   <AnimatePresence mode='popLayout'>
                     {lastMove?.cards.map((c: any) => (
@@ -612,7 +617,7 @@ const App: React.FC = () => {
                   </AnimatePresence>
                </div>
                {gameState?.gamePhase !== 'playing' && (
-                 <button onClick={handleStartGame} className="pointer-events-auto bg-yellow-500 px-12 py-4 rounded-2xl font-black shadow-2xl text-xl uppercase italic">CHIA BÀI</button>
+                 <button onClick={handleStartGame} className="pointer-events-auto bg-yellow-500 px-12 py-4 rounded-2xl font-black shadow-2xl text-xl uppercase italic active:scale-95 transition-all">CHIA BÀI</button>
                )}
             </div>
          </div>
@@ -651,22 +656,23 @@ const App: React.FC = () => {
         )}
       </AnimatePresence>
 
-      <div className="bg-slate-900/80 backdrop-blur-xl border-t border-white/10 pt-2 pb-safe px-2 md:px-4 z-[100]">
-          <div className="max-w-full mx-auto flex -space-x-5 md:-space-x-8 justify-center overflow-x-auto scrollbar-hide py-3 px-10">
+      {/* FIXED LANDSCAPE LAYOUT: Tăng padding, giảm space bài */}
+      <div className="bg-slate-900/90 backdrop-blur-xl border-t border-white/10 pt-1 pb-safe px-2 z-[100] landscape:h-[35vh] flex flex-col justify-end">
+          <div className="max-w-full mx-auto flex -space-x-8 md:-space-x-10 justify-center overflow-x-auto scrollbar-hide py-2 px-10 landscape:py-0 landscape:-space-x-12">
              <AnimatePresence>
                {me?.hand?.map((c: any, idx: number) => (
                  <CardComponent key={c.id || idx} card={c} isDealing={dealingCards} index={idx} isSelected={selectedCards.includes(c?.id)} onClick={() => setSelectedCards(prev => prev.includes(c.id) ? prev.filter(id => id !== c.id) : [...prev, c.id])} />
                ))}
              </AnimatePresence>
           </div>
-          <div className="flex justify-between items-center py-2 max-w-lg mx-auto gap-4">
-             <button onClick={toggleMic} className={`w-12 h-12 rounded-full flex items-center justify-center shadow-lg transition-all active:scale-90 ${isMicOn ? 'bg-red-500' : 'bg-slate-700'} pointer-events-auto z-[200]`}>
+          <div className="flex justify-between items-center py-2 max-w-lg mx-auto gap-4 landscape:py-1">
+             <button onClick={toggleMic} className={`w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center shadow-lg transition-all active:scale-90 ${isMicOn ? 'bg-red-500' : 'bg-slate-700'} pointer-events-auto z-[200]`}>
                 {isMicOn ? '🎤' : '🔇'}
              </button>
              {gameState?.gamePhase === 'playing' && (
                <div className="flex-1 flex gap-2 pointer-events-auto">
-                 <button onClick={async () => { await unlockAudio(); playSfx('pass'); ws?.send(JSON.stringify({ type: 'PASS_TURN' })); }} disabled={!isMyTurn || !lastMove} className="flex-1 py-3 bg-slate-800 rounded-xl font-black text-[10px] md:text-sm uppercase tracking-widest disabled:opacity-20 border border-white/5">Bỏ lượt</button>
-                 <button onClick={handlePlayCards} disabled={!isMyTurn || selectedCards.length === 0} className="flex-1 py-3 bg-emerald-600 rounded-xl font-black text-[10px] md:text-sm uppercase tracking-widest shadow-lg disabled:opacity-20 border border-emerald-400">Đánh bài</button>
+                 <button onClick={async () => { await unlockAudio(); playSfx('pass'); ws?.send(JSON.stringify({ type: 'PASS_TURN' })); }} disabled={!isMyTurn || !lastMove} className="flex-1 py-3 bg-slate-800 rounded-xl font-black text-[10px] md:text-sm uppercase tracking-widest disabled:opacity-20 border border-white/5 landscape:py-2">Bỏ lượt</button>
+                 <button onClick={handlePlayCards} disabled={!isMyTurn || selectedCards.length === 0} className="flex-1 py-3 bg-emerald-600 rounded-xl font-black text-[10px] md:text-sm uppercase tracking-widest shadow-lg disabled:opacity-20 border border-emerald-400 landscape:py-2">Đánh bài</button>
                </div>
              )}
           </div>
