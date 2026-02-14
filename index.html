@@ -54,7 +54,7 @@
     }
     /* Card scaling with clamp */
     .game-card {
-      height: clamp(60px, 16vw, 140px);
+      height: clamp(65px, 16vw, 140px);
       width: auto;
       aspect-ratio: 2/3;
     }
@@ -62,14 +62,15 @@
     /* Tối ưu cho màn hình ngang (iPhone/Android Landscape) */
     @media (orientation: landscape) {
       .game-card {
-        height: clamp(50px, 18vh, 100px);
+        /* Tăng kích thước tối thiểu và tỉ lệ vh để bài to hơn trong mode ngang */
+        height: clamp(60px, 22vh, 110px);
       }
       /* Giảm scale các hiệu ứng chữ lớn khi xoay ngang để không bị đè UI */
       .landscape-scale-text {
         font-size: clamp(2rem, 8vh, 4rem) !important;
       }
       .landscape-shrink {
-        transform: scale(0.85);
+        transform: scale(0.8);
       }
     }
 
@@ -82,7 +83,6 @@
       scrollbar-width: none;
     }
 </style>
-<link rel="stylesheet" href="/index.css">
 </head>
 <body class="text-slate-100">
     <div id="root"></div>
