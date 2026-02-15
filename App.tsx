@@ -583,10 +583,10 @@ const App: React.FC = () => {
       </div>
       <AnimatePresence>
         {currentEffect?.type === 'chat_heo' && (
-          <ChopEffect key={currentEffect.id} isChopHeo={true} chopType={currentEffect.chopType || 'three_pairs'} onComplete={onEffectComplete} />
+          <ChopEffect key={currentEffect.id} isChopHeo={true} chopType={currentEffect.chopType || 'three_pairs'} playerName={currentEffect.playerName} onComplete={onEffectComplete} />
         )}
         {currentEffect?.type === 'chat_chong' && (
-          <OverChopEffect key={currentEffect.id} isOverChop={true} onComplete={onEffectComplete} />
+          <OverChopEffect key={currentEffect.id} isOverChop={true} playerName={currentEffect.playerName} onComplete={onEffectComplete} />
         )}
         {['thui_heo', 'thui_3_doi_thong', 'thui_tu_quy', 'chay_bai', 'info', 'three_spade_win'].includes(currentEffect?.type) && (
           <SpecialEventAnnouncer key={currentEffect.id} event={currentEffect} onComplete={onEffectComplete} />

@@ -5,7 +5,7 @@ import { getSharedAudioCtx } from './App';
 
 interface OverChopEffectProps {
   isOverChop: boolean;
-  victimId?: string;
+  playerName?: string;
   onComplete?: () => void;
 }
 
@@ -63,10 +63,9 @@ const playOverChopSoundSynth = () => {
   metal.stop(now + 0.8);
 };
 
-const OverChopEffect: React.FC<OverChopEffectProps> = ({ isOverChop, victimId, onComplete }) => {
+const OverChopEffect: React.FC<OverChopEffectProps> = ({ isOverChop, playerName, onComplete }) => {
   useEffect(() => {
     playOverChopSoundSynth();
-    // Tăng thời gian hiển thị lên 5000ms (5 giây)
     const timer = setTimeout(() => {
       onComplete?.();
     }, 5000);
@@ -85,7 +84,7 @@ const OverChopEffect: React.FC<OverChopEffectProps> = ({ isOverChop, victimId, o
       <motion.div
         initial={{ scale: 0.1, opacity: 0, rotate: -20 }}
         animate={{ 
-          scale: [0.1, 1.8, 1.4],
+          scale: [0.1, 1.4, 1.2],
           opacity: [0, 1, 1],
           rotate: [-20, 10, 0],
           x: [-20, 20, -18, 18, -12, 12, -8, 8, 0],
@@ -93,11 +92,11 @@ const OverChopEffect: React.FC<OverChopEffectProps> = ({ isOverChop, victimId, o
         }}
         exit={{ scale: 4, opacity: 0, filter: "blur(20px)", transition: { duration: 0.3 } }}
         transition={{ duration: 0.9, times: [0, 0.4, 1] }}
-        className="fixed inset-0 z-[1000] flex items-center justify-center pointer-events-none"
+        className="fixed inset-0 z-[1000] flex items-center justify-center pointer-events-none px-4"
       >
         <div className="text-center">
-          <h1 className="text-8xl md:text-[12rem] font-black italic tracking-tighter uppercase select-none text-orange-500 drop-shadow-[0_0_50px_rgba(249,115,22,0.9)]">
-            CHẶT CHỒNG!
+          <h1 className="text-4xl md:text-8xl font-black italic tracking-tighter uppercase select-none text-orange-500 drop-shadow-[0_0_50px_rgba(249,115,22,0.9)]">
+            {playerName ? `${playerName} BỊ CHẶT CHỒNG. HAHAHA` : "CHẶT CHỒNG!"}
           </h1>
           <motion.div 
             initial={{ opacity: 0, y: 40 }}
@@ -105,7 +104,7 @@ const OverChopEffect: React.FC<OverChopEffectProps> = ({ isOverChop, victimId, o
             transition={{ delay: 0.2 }}
             className="mt-8"
           >
-            <span className="bg-red-600 text-white px-10 py-3 rounded-full text-3xl font-black uppercase tracking-[0.5em] shadow-[0_0_30px_rgba(220,38,38,0.5)]">
+            <span className="bg-red-600 text-white px-10 py-3 rounded-full text-2xl font-black uppercase tracking-[0.5em] shadow-[0_0_30px_rgba(220,38,38,0.5)]">
               LẬT KÈO
             </span>
           </motion.div>

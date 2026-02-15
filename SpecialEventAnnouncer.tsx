@@ -53,8 +53,6 @@ const SpecialEventAnnouncer: React.FC<SpecialEventAnnouncerProps> = ({ event, on
     if (event) {
       if (event.type !== 'info') playApplauseSound();
       
-      // Tăng holdTime lên 5000ms (5 giây) cho tất cả các loại sự kiện quan trọng.
-      // Riêng 'info' có thể giữ ngắn hơn một chút hoặc cũng 5s tùy ý, ở đây mình để đồng nhất là 5s cho yêu cầu.
       const holdTime = 5000;
       const timer = setTimeout(onComplete, holdTime);
       return () => clearTimeout(timer);
@@ -67,8 +65,8 @@ const SpecialEventAnnouncer: React.FC<SpecialEventAnnouncerProps> = ({ event, on
       case 'thui_heo': return { text: `🔥 ${event.playerName} THÚI HEO 🔥`, sub: 'Lêu lêu đồ thối heo!', color: 'text-orange-500', shadow: 'shadow-orange-500/50' };
       case 'thui_3_doi_thong': return { text: `🎉 ${event.playerName} THÚI 3 ĐÔI THÔNG 🎉`, sub: 'Ba đôi thông mà cũng thối!', color: 'text-pink-500', shadow: 'shadow-pink-500/50' };
       case 'thui_tu_quy': return { text: `👑 ${event.playerName} THÚI TỨ QUÝ 👑`, sub: 'Tứ quý để làm cảnh à?', color: 'text-purple-500', shadow: 'shadow-purple-500/50' };
-      case 'chat_heo': return { text: `💥 ${event.playerName} BỊ CHẶT HEO 💥`, sub: 'Ăn chặt cho chừa!', color: 'text-red-500', shadow: 'shadow-red-500/50' };
-      case 'chat_chong': return { text: `⚡ ${event.playerName} BỊ CHẶT CHỒNG ⚡`, sub: 'Chặt chồng nè con!', color: 'text-yellow-400', shadow: 'shadow-yellow-400/50' };
+      case 'chat_heo': return { text: `💥 ${event.playerName} BỊ CHẶT HEO. HAHAHA 💥`, sub: 'Ngu thì chết chứ bệnh tật gì!', color: 'text-red-500', shadow: 'shadow-red-500/50' };
+      case 'chat_chong': return { text: `⚡ ${event.playerName} BỊ CHẶT CHỒNG. HAHAHA ⚡`, sub: 'Chặt chồng nè con!', color: 'text-yellow-400', shadow: 'shadow-yellow-400/50' };
       case 'chay_bai': return { text: `❄️ ${event.playerName} BỊ CÓNG! ❄️`, sub: 'Chưa đánh lá nào đã cháy!', color: 'text-cyan-400', shadow: 'shadow-cyan-400/50' };
       case 'three_spade_win': return { text: `♠️ ${event.playerName} 3 BÍCH VỀ CHÓT (x2) ♠️`, sub: 'Pha lật kèo đỉnh cao!', color: 'text-emerald-400', shadow: 'shadow-emerald-400/50' };
       case 'info': return { text: `✨ ${event.playerName} ✨`, sub: '', color: 'text-emerald-400', shadow: 'shadow-emerald-400/50' };
@@ -103,7 +101,7 @@ const SpecialEventAnnouncer: React.FC<SpecialEventAnnouncerProps> = ({ event, on
               className="text-center"
             >
               <div className="bg-slate-900/95 border border-white/20 px-8 py-8 rounded-[40px] shadow-[0_0_50px_rgba(0,0,0,0.5)] flex flex-col items-center gap-4">
-                <h2 className={`${event.type === 'info' ? 'text-2xl md:text-4xl' : 'text-3xl md:text-6xl'} font-black italic uppercase tracking-tighter ${config.color} drop-shadow-[0_0_30px_rgba(255,255,255,0.3)]`}>
+                <h2 className={`${event.type === 'info' ? 'text-2xl md:text-4xl' : 'text-xl md:text-5xl'} font-black italic uppercase tracking-tighter ${config.color} drop-shadow-[0_0_30px_rgba(255,255,255,0.3)] px-4`}>
                   {config.text}
                 </h2>
                 {config.sub && (

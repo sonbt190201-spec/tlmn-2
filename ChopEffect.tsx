@@ -8,6 +8,7 @@ export type ChopType = "three_pairs" | "four_of_a_kind" | "four_pairs";
 interface ChopEffectProps {
   isChopHeo: boolean;
   chopType: ChopType;
+  playerName?: string;
   onComplete?: () => void;
 }
 
@@ -82,11 +83,10 @@ const playChopSoundSynth = (type: ChopType) => {
   }
 };
 
-const ChopEffect: React.FC<ChopEffectProps> = ({ isChopHeo, chopType, onComplete }) => {
+const ChopEffect: React.FC<ChopEffectProps> = ({ isChopHeo, chopType, playerName, onComplete }) => {
   useEffect(() => {
     playChopSoundSynth(chopType);
     
-    // Tăng thời gian hiển thị lên 5000ms (5 giây)
     const timer = setTimeout(() => {
       onComplete?.();
     }, 5000);
@@ -118,7 +118,7 @@ const ChopEffect: React.FC<ChopEffectProps> = ({ isChopHeo, chopType, onComplete
       <motion.div
         initial={{ scale: 0.3, opacity: 0, rotate: -10 }}
         animate={{ 
-          scale: [0.3, 1.6, 1.3],
+          scale: [0.3, 1.3, 1.1],
           opacity: [0, 1, 1],
           rotate: [10, -5, 0],
           x: [-15, 15, -12, 12, -8, 8, -5, 5, 0],
@@ -126,11 +126,11 @@ const ChopEffect: React.FC<ChopEffectProps> = ({ isChopHeo, chopType, onComplete
         }}
         exit={{ scale: 3, opacity: 0, filter: "blur(10px)", transition: { duration: 0.3 } }}
         transition={{ duration: 0.8, times: [0, 0.4, 1] }}
-        className="fixed inset-0 z-[1000] flex items-center justify-center pointer-events-none"
+        className="fixed inset-0 z-[1000] flex items-center justify-center pointer-events-none px-4"
       >
         <div className="text-center">
-          <h1 className={`text-7xl md:text-9xl font-black italic tracking-tighter uppercase select-none ${getGlowColor()}`}>
-            CHẶT HEO!
+          <h1 className={`text-4xl md:text-8xl font-black italic tracking-tighter uppercase select-none ${getGlowColor()}`}>
+            {playerName ? `${playerName} BỊ CHẶT HEO. HAHAHA` : "CHẶT HEO!"}
           </h1>
           <motion.div 
             initial={{ opacity: 0, y: 30 }}
@@ -138,7 +138,7 @@ const ChopEffect: React.FC<ChopEffectProps> = ({ isChopHeo, chopType, onComplete
             transition={{ delay: 0.1 }}
             className="mt-6 flex flex-col items-center gap-2"
           >
-            <p className="text-white text-2xl font-black uppercase tracking-[0.4em] drop-shadow-lg">
+            <p className="text-white text-xl font-black uppercase tracking-[0.4em] drop-shadow-lg">
               {chopType === "four_pairs" ? "4 ĐÔI THÔNG SIÊU CẤP" : chopType === "four_of_a_kind" ? "TỨ QUÝ QUYỀN NĂNG" : "3 ĐÔI THÔNG"}
             </p>
             <div className={`h-1 w-48 rounded-full ${chopType === 'four_pairs' ? 'bg-red-500' : 'bg-yellow-500'} shadow-lg`}></div>
