@@ -8,7 +8,7 @@ export interface ThoiResult {
 
 export class MoneyEngine {
   /**
-   * VI. QUY TẮC THỐI (Độc lập)
+   * TÍNH TIỀN THỐI (Độc lập)
    * Heo đen: 0.5, Heo đỏ: 1, 3 đôi thông: 1, Tứ quý: 4
    */
   static calculateThoi(player: Player, bet: number): ThoiResult {
@@ -18,7 +18,6 @@ export class MoneyEngine {
     const counts: Record<number, number> = {};
 
     hand.forEach(c => {
-      // Heo (rank 15)
       if (c.rank === 15) {
         if (c.suit === 'heart' || c.suit === 'diamond') {
           loss += bet;
@@ -31,7 +30,6 @@ export class MoneyEngine {
       counts[c.rank] = (counts[c.rank] || 0) + 1;
     });
 
-    // Tứ quý (4 lá cùng rank < 15)
     Object.keys(counts).forEach(rank => {
       const r = Number(rank);
       if (counts[r] === 4 && r < 15) {
@@ -40,7 +38,6 @@ export class MoneyEngine {
       }
     });
 
-    // 3 đôi thông (3 cặp liên tiếp < 15)
     const sortedRanks = Object.keys(counts).map(Number).sort((a, b) => a - b);
     for (let i = 0; i < sortedRanks.length - 2; i++) {
       if (counts[sortedRanks[i]] >= 2 && counts[sortedRanks[i + 1]] >= 2 && counts[sortedRanks[i + 2]] >= 2 &&
@@ -56,12 +53,11 @@ export class MoneyEngine {
   }
 
   /**
-   * settleGame: Hàm điều phối chính dựa trên playerCount
+   * settleGame: Điều phối thanh toán ván đấu
    */
   static settleGame(players: Player[], bet: number): PayoutResult[] {
     const playerCount = players.length;
     const results: PayoutResult[] = [];
-    // Sắp xếp người chơi theo rank thực tế (1 -> 4)
     const sorted = [...players].sort((a, b) => (a.finishedRank || 0) - (b.finishedRank || 0));
 
     switch (playerCount) {
@@ -82,64 +78,128 @@ export class MoneyEngine {
   }
 
   /**
-   * III. BÀN 2 NGƯỜI
-   * Tiền thứ hạng: Nhất +1, Bét -1
-   * Tiền thối: Bét -> Nhất
+   * BÀN 2 NGƯỜI
+   * Nhất +2, Cóng -2. Tiền thối trả cho Nhất.
    */
-  private static settleTable2(p1: Player, last: Player, bet: number, results: PayoutResult[]) {
-    // 1. Tiền thứ hạng
-    results.push({ playerId: p1.id, change: bet, reason: "Nhất (+1 cược)" });
-    results.push({ playerId: last.id, change: -bet, reason: "Bét (-1 cược)" });
+  private static settleTable2(p1: Player, p2: Player, bet: number, results: PayoutResult[]) {
+    const isBurned = p2.isBurned;
+    const multiplier = isBurned ? 2 : 1;
+    const reasonBet = isBurned ? "Bị Cóng (-2 cược)" : "Bét (-1 cược)";
+    const reasonWin = isBurned ? "Thắng Cóng (+2 cược)" : "Nhất (+1 cược)";
 
-    // 2. Tiền thối
-    const thoi = this.calculateThoi(last, bet);
+    results.push({ playerId: p1.id, change: bet * multiplier, reason: reasonWin });
+    results.push({ playerId: p2.id, change: -bet * multiplier, reason: reasonBet });
+
+    // Tiền thối
+    const thoi = this.calculateThoi(p2, bet);
     if (thoi.totalLoss > 0) {
-      results.push({ playerId: p1.id, change: thoi.totalLoss, reason: `Nhận thối: ${thoi.details.join(', ')}` });
-      results.push({ playerId: last.id, change: -thoi.totalLoss, reason: `Thối bài: ${thoi.details.join(', ')}` });
+      results.push({ playerId: p1.id, change: thoi.totalLoss, reason: `Nhận thối từ ${p2.name}: ${thoi.details.join(', ')}` });
+      results.push({ playerId: p2.id, change: -thoi.totalLoss, reason: `Thối bài: ${thoi.details.join(', ')}` });
     }
   }
 
   /**
-   * IV. BÀN 3 NGƯỜI
-   * Tiền thứ hạng: Nhất +1, Nhì 0, Bét -1 (Bét trả cho Nhất)
-   * Tiền thối: Bét -> Nhì
+   * BÀN 3 NGƯỜI
    */
-  private static settleTable3(p1: Player, p2: Player, last: Player, bet: number, results: PayoutResult[]) {
-    // 1. Tiền thứ hạng
-    results.push({ playerId: p1.id, change: bet, reason: "Nhất (+1 cược)" });
-    results.push({ playerId: p2.id, change: 0, reason: "Nhì" });
-    results.push({ playerId: last.id, change: -bet, reason: "Bét (-1 cược)" });
+  private static settleTable3(p1: Player, p2: Player, p3: Player, bet: number, results: PayoutResult[]) {
+    const burnedCount = [p2, p3].filter(p => p.isBurned).length;
 
-    // 2. Tiền thối
-    const thoi = this.calculateThoi(last, bet);
-    if (thoi.totalLoss > 0) {
-      results.push({ playerId: p2.id, change: thoi.totalLoss, reason: `Nhì nhận thối: ${thoi.details.join(', ')}` });
-      results.push({ playerId: last.id, change: -thoi.totalLoss, reason: `Thối bài: ${thoi.details.join(', ')}` });
+    if (burnedCount === 1) {
+      // p3 là người bị cóng (do đã được sort theo rank, Cóng luôn ở cuối)
+      results.push({ playerId: p1.id, change: bet * 2, reason: "Thắng Cóng (+2 cược)" });
+      results.push({ playerId: p2.id, change: 0, reason: "Nhì (Hòa)" });
+      results.push({ playerId: p3.id, change: -bet * 2, reason: "Bị Cóng (-2 cược)" });
+
+      const thoi = this.calculateThoi(p3, bet);
+      if (thoi.totalLoss > 0) {
+        results.push({ playerId: p1.id, change: thoi.totalLoss, reason: `Nhận thối từ ${p3.name}: ${thoi.details.join(', ')}` });
+        results.push({ playerId: p3.id, change: -thoi.totalLoss, reason: `Thối bài: ${thoi.details.join(', ')}` });
+      }
+    } else if (burnedCount === 2) {
+      // Cả 2 đều cóng
+      results.push({ playerId: p1.id, change: bet * 4, reason: "Thắng 2 Cóng (+4 cược)" });
+      results.push({ playerId: p2.id, change: -bet * 2, reason: "Bị Cóng (-2 cược)" });
+      results.push({ playerId: p3.id, change: -bet * 2, reason: "Bị Cóng (-2 cược)" });
+
+      [p2, p3].forEach(p => {
+        const thoi = this.calculateThoi(p, bet);
+        if (thoi.totalLoss > 0) {
+          results.push({ playerId: p1.id, change: thoi.totalLoss, reason: `Nhận thối từ ${p.name}: ${thoi.details.join(', ')}` });
+          results.push({ playerId: p.id, change: -thoi.totalLoss, reason: `Thối bài: ${thoi.details.join(', ')}` });
+        }
+      });
+    } else {
+      // Không ai cóng: Nhất +1, Nhì 0, Bét -1. Thối: Bét -> Nhì
+      results.push({ playerId: p1.id, change: bet, reason: "Nhất (+1 cược)" });
+      results.push({ playerId: p2.id, change: 0, reason: "Nhì" });
+      results.push({ playerId: p3.id, change: -bet, reason: "Bét (-1 cược)" });
+
+      const thoi = this.calculateThoi(p3, bet);
+      if (thoi.totalLoss > 0) {
+        results.push({ playerId: p2.id, change: thoi.totalLoss, reason: `Nhì nhận thối từ ${p3.name}: ${thoi.details.join(', ')}` });
+        results.push({ playerId: p3.id, change: -thoi.totalLoss, reason: `Thối bài: ${thoi.details.join(', ')}` });
+      }
     }
   }
 
   /**
-   * V. BÀN 4 NGƯỜI
-   * Tiền thứ hạng: Nhất +1, Nhì +0.5, Ba -0.5, Bét -1
-   * Tiền thối: Bét -> Ba
+   * BÀN 4 NGƯỜI
    */
-  private static settleTable4(p1: Player, p2: Player, p3: Player, last: Player, bet: number, results: PayoutResult[]) {
-    // 1. Tiền thứ hạng
-    results.push({ playerId: p1.id, change: bet, reason: "Nhất (+1 cược)" });
-    results.push({ playerId: p2.id, change: bet * 0.5, reason: "Nhì (+0.5 cược)" });
-    results.push({ playerId: p3.id, change: -bet * 0.5, reason: "Ba (-0.5 cược)" });
-    results.push({ playerId: last.id, change: -bet, reason: "Bét (-1 cược)" });
+  private static settleTable4(p1: Player, p2: Player, p3: Player, p4: Player, bet: number, results: PayoutResult[]) {
+    const burnedCount = [p2, p3, p4].filter(p => p.isBurned).length;
 
-    // 2. Tiền thối
-    const thoi = this.calculateThoi(last, bet);
-    if (thoi.totalLoss > 0) {
-      results.push({ playerId: p3.id, change: thoi.totalLoss, reason: `Ba nhận thối: ${thoi.details.join(', ')}` });
-      results.push({ playerId: last.id, change: -thoi.totalLoss, reason: `Thối bài: ${thoi.details.join(', ')}` });
+    if (burnedCount === 1) {
+      // p4 bị cóng. p2 p3 tranh nhì ba (+0.5, -0.5)
+      results.push({ playerId: p1.id, change: bet * 2, reason: "Thắng Cóng (+2 cược)" });
+      results.push({ playerId: p2.id, change: bet * 0.5, reason: "Nhì (+0.5 cược)" });
+      results.push({ playerId: p3.id, change: -bet * 0.5, reason: "Ba (-0.5 cược)" });
+      results.push({ playerId: p4.id, change: -bet * 2, reason: "Bị Cóng (-2 cược)" });
+
+      const thoi = this.calculateThoi(p4, bet);
+      if (thoi.totalLoss > 0) {
+        results.push({ playerId: p1.id, change: thoi.totalLoss, reason: `Nhận thối từ ${p4.name}: ${thoi.details.join(', ')}` });
+        results.push({ playerId: p4.id, change: -thoi.totalLoss, reason: `Thối bài: ${thoi.details.join(', ')}` });
+      }
+    } else if (burnedCount === 2) {
+      // p3, p4 bị cóng. p2 là Ba (0 cược)
+      results.push({ playerId: p1.id, change: bet * 4, reason: "Thắng 2 Cóng (+4 cược)" });
+      results.push({ playerId: p2.id, change: 0, reason: "Ba (Hòa)" });
+      results.push({ playerId: p3.id, change: -bet * 2, reason: "Bị Cóng (-2 cược)" });
+      results.push({ playerId: p4.id, change: -bet * 2, reason: "Bị Cóng (-2 cược)" });
+
+      [p3, p4].forEach(p => {
+        const thoi = this.calculateThoi(p, bet);
+        if (thoi.totalLoss > 0) {
+          results.push({ playerId: p1.id, change: thoi.totalLoss, reason: `Nhận thối từ ${p.name}: ${thoi.details.join(', ')}` });
+          results.push({ playerId: p.id, change: -thoi.totalLoss, reason: `Thối bài: ${thoi.details.join(', ')}` });
+        }
+      });
+    } else if (burnedCount === 3) {
+        // Cả 3 người đều cóng
+        results.push({ playerId: p1.id, change: bet * 6, reason: "Thắng 3 Cóng (+6 cược)" });
+        [p2, p3, p4].forEach(p => {
+            results.push({ playerId: p.id, change: -bet * 2, reason: "Bị Cóng (-2 cược)" });
+            const thoi = this.calculateThoi(p, bet);
+            if (thoi.totalLoss > 0) {
+              results.push({ playerId: p1.id, change: thoi.totalLoss, reason: `Nhận thối từ ${p.name}: ${thoi.details.join(', ')}` });
+              results.push({ playerId: p.id, change: -thoi.totalLoss, reason: `Thối bài: ${thoi.details.join(', ')}` });
+            }
+        });
+    } else {
+      // Không ai cóng: 1, 0.5, -0.5, -1
+      results.push({ playerId: p1.id, change: bet, reason: "Nhất (+1 cược)" });
+      results.push({ playerId: p2.id, change: bet * 0.5, reason: "Nhì (+0.5 cược)" });
+      results.push({ playerId: p3.id, change: -bet * 0.5, reason: "Ba (-0.5 cược)" });
+      results.push({ playerId: p4.id, change: -bet, reason: "Bét (-1 cược)" });
+
+      const thoi = this.calculateThoi(p4, bet);
+      if (thoi.totalLoss > 0) {
+        results.push({ playerId: p3.id, change: thoi.totalLoss, reason: `Ba nhận thối từ ${p4.name}: ${thoi.details.join(', ')}` });
+        results.push({ playerId: p4.id, change: -thoi.totalLoss, reason: `Thối bài: ${thoi.details.join(', ')}` });
+      }
     }
   }
 
-  // Khương định các method cũ để tránh lỗi compile nếu nơi khác đang dùng
-  static calculateThoiValue(p: Player, b: number) { return this.calculateThoi(p, b); }
   static calculateTrangMoney(w: string, ids: string[], b: number) {
     const res: PayoutResult[] = [];
     const winAmt = b * 2 * (ids.length - 1);
@@ -152,6 +212,7 @@ export class MoneyEngine {
     });
     return res;
   }
+  static calculateThoiValue(p: Player, b: number) { return this.calculateThoi(p, b); }
   static calculateRankMoney(p: Player[], b: number) { return this.settleGame(p, b); }
   static calculateCongMoney(p: Player[], b: number) { return this.settleGame(p, b); }
 }

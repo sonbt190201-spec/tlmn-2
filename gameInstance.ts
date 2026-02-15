@@ -242,9 +242,9 @@ export class GameInstance {
     const activePlayers = this.players.filter(p => !this.finishedPlayers.includes(p.id));
     const ownerId = this.lastMove?.playerId;
     
-    // Kiểm tra xem vòng chơi đã kết thúc chưa (Tất cả người ACTIVE còn lại đã bỏ lượt)
     if (ownerId) {
-      const activeOpponents = activePlayers.filter(p => p.id !== ownerId);
+      // Chỉ tính những đối thủ thực sự có khả năng đánh (không bỏ lượt, không Cóng)
+      const activeOpponents = activePlayers.filter(p => p.id !== ownerId && !p.isBurned);
       if (activeOpponents.length === 0 || activeOpponents.every(p => this.passedPlayers.has(p.id))) {
         this.resetRound(ownerId);
         return;
@@ -257,13 +257,13 @@ export class GameInstance {
     for (let i = 0; i < playerCount; i++) {
       const p = this.players[nextIdx];
       
-      // Nếu vòng lặp quay lại người đang giữ bài -> Reset vòng
       if (ownerId && p.id === ownerId) {
         this.resetRound(ownerId);
         return;
       }
 
-      if (!this.finishedPlayers.includes(p.id) && !this.passedPlayers.has(p.id)) {
+      // Bỏ qua người đã về, đã bỏ lượt HOẶC bị Cóng
+      if (!this.finishedPlayers.includes(p.id) && !this.passedPlayers.has(p.id) && !p.isBurned) {
         this.currentTurn = nextIdx;
         return;
       }
@@ -278,12 +278,12 @@ export class GameInstance {
     
     let leadIdx = this.players.findIndex(p => p.id === winnerId);
     
-    // Nếu người thắng vòng đã về, trao quyền Lead cho người ACTIVE tiếp theo
-    if (this.finishedPlayers.includes(winnerId)) {
+    // Tìm người tiếp theo có khả năng đánh nếu người thắng vòng đã về hoặc bị Cóng (không thể xảy ra với Cóng nhưng an toàn)
+    if (this.finishedPlayers.includes(winnerId) || this.players[leadIdx].isBurned) {
       const playerCount = this.players.length;
       let nextIdx = (leadIdx + 1) % playerCount;
       for (let i = 0; i < playerCount; i++) {
-        if (!this.finishedPlayers.includes(this.players[nextIdx].id)) {
+        if (!this.finishedPlayers.includes(this.players[nextIdx].id) && !this.players[nextIdx].isBurned) {
           leadIdx = nextIdx;
           break;
         }
@@ -299,6 +299,7 @@ export class GameInstance {
     this.finishedPlayers.push(player.id);
     player.finishedRank = this.finishedPlayers.length;
 
+    // Khi có người về Nhất, kiểm tra Cóng ngay lập tức
     if (player.finishedRank === 1) {
       this.players.forEach(p => {
         if (p.id !== player.id && !p.hasPlayedAnyCard) {
@@ -308,14 +309,10 @@ export class GameInstance {
       });
     }
 
-    const remainingActive = this.players.filter(p => !this.finishedPlayers.includes(p.id));
-    if (remainingActive.length <= 1) {
-      remainingActive.forEach(p => {
-        if (!this.finishedPlayers.includes(p.id)) {
-          this.finishedPlayers.push(p.id);
-          p.finishedRank = this.finishedPlayers.length;
-        }
-      });
+    // Kiểm tra số lượng người có khả năng chơi tiếp (không về, không Cóng)
+    const remainingPlayable = this.players.filter(p => !this.finishedPlayers.includes(p.id) && !p.isBurned);
+    
+    if (remainingPlayable.length <= 1) {
       this.endRound();
     } else {
       this.moveToNextPlayer();
@@ -329,6 +326,16 @@ export class GameInstance {
     this.isFirstGame = false;
     this.lastWasInstantWin = false;
     this.startingPlayerId = this.finishedPlayers[0];
+
+    // Sắp xếp lại những người chưa về: người không Cóng xếp trước (Nhì/Ba), người Cóng xếp sau (Bét)
+    const remaining = this.players.filter(p => !this.finishedPlayers.includes(p.id));
+    remaining.sort((a, b) => (a.isBurned ? 1 : 0) - (b.isBurned ? 1 : 0));
+    
+    remaining.forEach(p => {
+      this.finishedPlayers.push(p.id);
+      p.finishedRank = this.finishedPlayers.length;
+    });
+
     const settlements = MoneyEngine.settleGame(this.players, this.bet);
     settlements.forEach(pay => {
       const p = this.players.find(pl => pl.id === pay.playerId);
