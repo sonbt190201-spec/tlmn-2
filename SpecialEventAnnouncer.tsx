@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getSharedAudioCtx } from './App';
 
-export type SpecialEventType = 'thui_heo' | 'thui_3_doi_thong' | 'thui_tu_quy' | 'chat_heo' | 'chat_chong' | 'chay_bai' | 'info' | 'rank' | 'three_spade_win';
+export type SpecialEventType = 'thui_heo' | 'thui_3_doi_thong' | 'thui_tu_quy' | 'chat_heo' | 'chat_chong' | 'chay_bai' | 'cong_ca_ban' | 'info' | 'rank' | 'three_spade_win';
 
 interface SpecialEvent {
   id: string;
@@ -68,6 +68,7 @@ const SpecialEventAnnouncer: React.FC<SpecialEventAnnouncerProps> = ({ event, on
       case 'chat_heo': return { text: `💥 ${event.playerName} BỊ CHẶT HEO. HAHAHA 💥`, sub: 'Ngu thì chết chứ bệnh tật gì!', color: 'text-red-500', shadow: 'shadow-red-500/50' };
       case 'chat_chong': return { text: `⚡ ${event.playerName} BỊ CHẶT CHỒNG. HAHAHA ⚡`, sub: 'Chặt chồng nè con!', color: 'text-yellow-400', shadow: 'shadow-yellow-400/50' };
       case 'chay_bai': return { text: `❄️ ${event.playerName} BỊ CÓNG! ❄️`, sub: 'Chưa đánh lá nào đã cháy!', color: 'text-cyan-400', shadow: 'shadow-cyan-400/50' };
+      case 'cong_ca_ban': return { text: `💀 CÓNG CẢ BÀN 💀`, sub: 'Tất cả các vị đều là phế vật!', color: 'text-purple-600', shadow: 'shadow-purple-900/50' };
       case 'three_spade_win': return { text: `♠️ ${event.playerName} 3 BÍCH VỀ CHÓT (x2) ♠️`, sub: 'Pha lật kèo đỉnh cao!', color: 'text-emerald-400', shadow: 'shadow-emerald-400/50' };
       case 'info': return { text: `✨ ${event.playerName} ✨`, sub: '', color: 'text-emerald-400', shadow: 'shadow-emerald-400/50' };
       default: return null;

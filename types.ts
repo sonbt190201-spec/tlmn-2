@@ -57,7 +57,7 @@ export interface MoneyTransaction {
 }
 
 export interface GameEventRecord {
-  type: 'CHOP' | 'OVER_CHOP' | 'THOI' | 'CONG' | 'INSTANT_WIN' | 'RANK' | 'THREE_SPADE_WIN';
+  type: 'CHOP' | 'OVER_CHOP' | 'THOI' | 'CONG' | 'CONG_CA_BAN' | 'INSTANT_WIN' | 'RANK' | 'THREE_SPADE_WIN';
   fromPlayerId?: string;
   toPlayerId?: string;
   playerName?: string;

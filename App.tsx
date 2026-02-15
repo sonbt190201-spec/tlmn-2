@@ -588,7 +588,7 @@ const App: React.FC = () => {
         {currentEffect?.type === 'chat_chong' && (
           <OverChopEffect key={currentEffect.id} isOverChop={true} playerName={currentEffect.playerName} onComplete={onEffectComplete} />
         )}
-        {['thui_heo', 'thui_3_doi_thong', 'thui_tu_quy', 'chay_bai', 'info', 'three_spade_win'].includes(currentEffect?.type) && (
+        {['thui_heo', 'thui_3_doi_thong', 'thui_tu_quy', 'chay_bai', 'cong_ca_ban', 'info', 'three_spade_win'].includes(currentEffect?.type) && (
           <SpecialEventAnnouncer key={currentEffect.id} event={currentEffect} onComplete={onEffectComplete} />
         )}
         {gameState?.gamePhase === 'finished' && me?.finishedRank && (

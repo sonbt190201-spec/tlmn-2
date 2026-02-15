@@ -299,14 +299,33 @@ export class GameInstance {
     this.finishedPlayers.push(player.id);
     player.finishedRank = this.finishedPlayers.length;
 
-    // Khi có người về Nhất, kiểm tra Cóng ngay lập tức
+    // Khi có người về Nhất, kiểm tra Cóng
     if (player.finishedRank === 1) {
-      this.players.forEach(p => {
-        if (p.id !== player.id && !p.hasPlayedAnyCard) {
-          p.isBurned = true;
-          this.roundEvents.push({ type: 'CONG', playerName: p.name, description: `${p.name} bị Cóng!`, timestamp: Date.now() });
-        }
+      const otherPlayers = this.players.filter(p => p.id !== player.id);
+      const burnedPlayers = otherPlayers.filter(p => !p.hasPlayedAnyCard);
+      
+      otherPlayers.forEach(p => {
+        if (!p.hasPlayedAnyCard) p.isBurned = true;
       });
+
+      // Nếu bàn có >= 3 người và TẤT CẢ những người khác đều bị cóng
+      if (this.players.length >= 3 && burnedPlayers.length === otherPlayers.length) {
+        this.roundEvents.push({ 
+          type: 'CONG_CA_BAN', 
+          description: `Cóng cả bàn, tất cả các vị đều là phế vật`, 
+          timestamp: Date.now() 
+        });
+      } else {
+        // Ngược lại hiển thị từng người bị cóng như cũ
+        burnedPlayers.forEach(p => {
+          this.roundEvents.push({ 
+            type: 'CONG', 
+            playerName: p.name, 
+            description: `${p.name} bị Cóng!`, 
+            timestamp: Date.now() 
+          });
+        });
+      }
     }
 
     // Kiểm tra số lượng người có khả năng chơi tiếp (không về, không Cóng)

@@ -249,6 +249,8 @@ wss.on('connection', (ws) => {
                       else specialType = 'thui_heo';
                     } else if (ev.type === 'CONG') {
                       specialType = 'chay_bai';
+                    } else if (ev.type === 'CONG_CA_BAN') {
+                      specialType = 'cong_ca_ban';
                     } else if (ev.type === 'INSTANT_WIN') {
                       specialType = 'info';
                       displayPlayerName = `ĂN TRẮNG: ${ev.playerName}`;
