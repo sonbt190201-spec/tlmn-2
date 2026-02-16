@@ -8,7 +8,7 @@ import RankEffect from './RankEffect';
 import ChatModule from './ChatModule';
 import TrollModule from './TrollModule';
 import SpecialEventAnnouncer, { SpecialEventType } from './SpecialEventAnnouncer';
-import { suggestBestArrangement } from './utils/suggestSort.ts';
+import { suggestBestArrangement } from './suggestSort.js';
 
 // MOBILE AUDIO FIX START
 let sharedAudioCtx: AudioContext | null = null;
