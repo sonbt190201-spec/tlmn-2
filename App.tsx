@@ -8,6 +8,7 @@ import RankEffect from './RankEffect';
 import ChatModule from './ChatModule';
 import TrollModule from './TrollModule';
 import SpecialEventAnnouncer, { SpecialEventType } from './SpecialEventAnnouncer';
+import { suggestBestArrangement } from './utils/suggestSort.ts';
 
 // MOBILE AUDIO FIX START
 let sharedAudioCtx: AudioContext | null = null;
@@ -313,6 +314,7 @@ const App: React.FC = () => {
   const [specialEventQueue, setSpecialEventQueue] = useState<any[]>([]);
   const [dealingCards, setDealingCards] = useState(false);
   const [isLandscape, setIsLandscape] = useState(false);
+  const [useSuggestedSort, setUseSuggestedSort] = useState(false);
   const prevPhase = useRef<string | null>(null);
 
   const [isMicOn, setIsMicOn] = useState(false);
@@ -492,12 +494,29 @@ const App: React.FC = () => {
     ws?.send(JSON.stringify({ type: 'PASS_TURN' }));
   };
 
-  // SỬA LỖI QUAN TRỌNG: Xóa bài đã chọn khi lượt chơi thay đổi hoặc reset vòng (lastMove là null)
   useEffect(() => {
     if (gameState?.lastMove?.playerId === myId || gameState?.lastMove === null) {
       setSelectedCards([]);
     }
   }, [gameState?.lastMove, myId]);
+  
+  useEffect(() => {
+    // Reset sort suggestion on new round
+    if (gameState?.gamePhase === 'playing' && prevPhase.current !== 'playing') {
+      setUseSuggestedSort(false);
+    }
+  }, [gameState?.gamePhase]);
+
+  const me = gameState?.players?.find((p: any) => p.id === myId);
+
+  const handToDisplay = useMemo(() => {
+    if (!me?.hand || me.hand.length === 0) return [];
+    const originalHand = me.hand; 
+    if (useSuggestedSort) {
+      return suggestBestArrangement([...originalHand]);
+    }
+    return originalHand;
+  }, [me?.hand, useSuggestedSort]);
 
   const orderedPlayers = useMemo(() => {
     const playersInGame = gameState?.players || [];
@@ -549,7 +568,6 @@ const App: React.FC = () => {
     );
   }
 
-  const me = gameState?.players?.find((p: any) => p.id === myId);
   const isMyTurn = gameState?.players && gameState.players[gameState.currentTurn]?.id === myId;
   const lastMove = gameState?.lastMove;
   const currentEffect = specialEventQueue[0] || null;
@@ -610,7 +628,7 @@ const App: React.FC = () => {
           )}
           <div className="max-w-full mx-auto flex -space-x-1 md:-space-x-2 justify-center overflow-x-auto scrollbar-hide py-3 px-10">
              <AnimatePresence>
-               {me?.hand?.map((c: any, idx: number) => (
+               {handToDisplay.map((c: any, idx: number) => (
                  <CardComponent key={c.id || idx} card={c} isDealing={dealingCards} index={idx} isSelected={selectedCards.includes(c?.id)} onClick={() => setSelectedCards(prev => prev.includes(c.id) ? prev.filter(id => id !== c.id) : [...prev, c.id])} />
                ))}
              </AnimatePresence>
@@ -632,6 +650,25 @@ const App: React.FC = () => {
                   </div>
                 )
              )}
+             <button 
+                onClick={() => { playSfx('click'); setUseSuggestedSort(prev => !prev); }} 
+                disabled={!me?.hand || me.hand.length === 0}
+                className="w-12 h-12 rounded-full flex items-center justify-center shadow-lg transition-all active:scale-90 bg-slate-700 hover:bg-slate-600 disabled:opacity-30 disabled:cursor-not-allowed pointer-events-auto z-[200] relative overflow-hidden"
+                title={useSuggestedSort ? "Xếp bài mặc định" : "Gợi ý xếp bài"}
+             >
+                <AnimatePresence initial={false}>
+                  <motion.span 
+                      key={useSuggestedSort ? 'default' : 'suggest'}
+                      initial={{ rotateY: -90, opacity: 0 }}
+                      animate={{ rotateY: 0, opacity: 1 }}
+                      exit={{ rotateY: 90, opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="text-xl absolute"
+                  >
+                      {useSuggestedSort ? '🃏' : '💡'}
+                  </motion.span>
+                </AnimatePresence>
+            </button>
           </div>
       </div>
       <AnimatePresence>

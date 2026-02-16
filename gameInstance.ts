@@ -36,7 +36,6 @@ export class GameInstance {
   private smallestCardIdInGame: string = ''; 
   private chopChain: { attackerId: string, victimId: string, value: number }[] = [];
 
-  // Logic mới cho 4 đôi thông
   private isHeoChainActive: boolean = false;
   private specialTurnFor: { playerId: string; handType: HandType.FOUR_CONSECUTIVE_PAIRS; } | null = null;
 
@@ -155,7 +154,6 @@ export class GameInstance {
     const cards = player.hand.filter(c => cardIds.includes(c.id));
     if (cards.length !== cardIds.length) return { error: "Bài không hợp lệ (Quân bài không có trong tay)" };
 
-    // Xử lý lượt đặc biệt
     if (this.specialTurnFor && this.specialTurnFor.playerId === playerId) {
       const handType = detectHandType(cards);
       if (handType !== HandType.FOUR_CONSECUTIVE_PAIRS) return { error: "Trong lượt đặc biệt, bạn chỉ được dùng 4 đôi thông." };
@@ -165,6 +163,7 @@ export class GameInstance {
       player.hasPlayedAnyCard = true;
       this.lastMove = { type: handType, cards, playerId, timestamp: Date.now() };
       this.specialTurnFor = null;
+      this.passedPlayers.delete(playerId); 
       this.resetRound(playerId);
       if (player.hand.length === 0) this.handlePlayerFinish(player);
       return { error: null };
@@ -180,19 +179,40 @@ export class GameInstance {
     const handType = detectHandType(cards);
     if (handType === HandType.INVALID) return { error: "Bộ bài không hợp lệ" };
 
+    let chopInfo: PlayMoveResult['chopInfo'] = undefined;
+
     if (this.lastMove) {
       if (compareHands(cards, this.lastMove.cards) !== 1) return { error: "Bộ bài không đủ mạnh để chặn" };
       
       const isAttackerHang = [HandType.THREE_CONSECUTIVE_PAIRS, HandType.FOUR_OF_A_KIND, HandType.FOUR_CONSECUTIVE_PAIRS].includes(handType);
       const isVictimHeo = this.lastMove.cards.some(c => c.rank === 15);
-      if (isAttackerHang && isVictimHeo) this.isHeoChainActive = true;
+      
+      const victimIsHang = [HandType.THREE_CONSECUTIVE_PAIRS, HandType.FOUR_OF_A_KIND, HandType.FOUR_CONSECUTIVE_PAIRS].includes(this.lastMove.type);
+      const isChop = (isAttackerHang && isVictimHeo) || (isAttackerHang && victimIsHang);
+
+      if (isChop) {
+        const isOverChop = this.chopChain.length > 0;
+        const penalty = MoneyEngine.calculateChopPenalty(this.lastMove, handType, this.bet, isOverChop);
+        
+        if (penalty > 0) {
+          const victimId = this.lastMove.playerId;
+          this.chopChain.push({ attackerId: playerId, victimId, value: penalty });
+          chopInfo = {
+            attackerId: playerId,
+            victimId,
+            type: isOverChop ? 'OVER_CHOP' : 'CHOP',
+            amount: penalty,
+            handType: handType.toString(),
+          };
+          this.isHeoChainActive = true;
+        }
+      }
     }
 
     player.hand = player.hand.filter(c => !cardIds.includes(c.id));
     player.hasPlayedAnyCard = true;
     this.lastMove = { type: handType, cards, playerId, timestamp: Date.now() };
     this.isFirstMoveOfGame = false;
-    this.passedPlayers.delete(playerId);
     
     if (!this.isHeoChainActive) {
         this.isHeoChainActive = this.lastMove.cards.some(c => c.rank === 15);
@@ -203,10 +223,31 @@ export class GameInstance {
     } else {
       this.moveToNextPlayer();
     }
-    return { error: null };
+    return { error: null, chopInfo };
   }
 
-  private resolveChopChain() { /* ... giữ nguyên ... */ }
+  private resolveChopChain() {
+    this.chopChain.forEach(chop => {
+      const attacker = this.players.find(p => p.id === chop.attackerId);
+      const victim = this.players.find(p => p.id === chop.victimId);
+      if (!attacker || !victim) return;
+
+      this.lastPayouts.push({ playerId: attacker.id, change: chop.value, reason: `Chặt ${victim.name}` });
+      this.lastPayouts.push({ playerId: victim.id, change: -chop.value, reason: `Bị ${attacker.name} chặt` });
+
+      this.roundEvents.push({
+        type: 'CHOP',
+        fromPlayerId: attacker.id,
+        toPlayerId: victim.id,
+        playerName: attacker.name,
+        targetName: victim.name,
+        amount: chop.value,
+        description: `${attacker.name} chặt ${victim.name} (+${chop.value.toLocaleString()}$)`,
+        timestamp: Date.now(),
+      });
+    });
+    this.chopChain = [];
+  }
 
   passTurn(playerId: string) {
     if (this.specialTurnFor && this.specialTurnFor.playerId === playerId) {
@@ -214,7 +255,9 @@ export class GameInstance {
         this.moveToNextPlayer();
         return;
     }
-    if (this.players[this.currentTurn].id !== playerId || !this.lastMove) return;
+    if (this.players[this.currentTurn].id !== playerId) return;
+    if (!this.lastMove) return; 
+
     this.passedPlayers.add(playerId);
     this.moveToNextPlayer();
   }
@@ -223,32 +266,31 @@ export class GameInstance {
     if (this.gamePhase !== "playing") return;
 
     const playerCount = this.players.length;
-    let nextIdx = (this.currentTurn + 1) % playerCount;
+    let nextIdx = this.currentTurn;
+    let checkedCount = 0;
 
-    for (let i = 0; i < playerCount; i++) {
+    while (checkedCount < playerCount) {
+        nextIdx = (nextIdx + 1) % playerCount;
+        checkedCount++;
+        
         const p = this.players[nextIdx];
         const pId = p.id;
         
-        // Về đích, bị cóng, hoặc đang trong lượt đặc biệt thì bỏ qua
-        if (this.finishedPlayers.includes(pId) || p.isBurned || (this.specialTurnFor && this.specialTurnFor.playerId === pId)) {
-            nextIdx = (nextIdx + 1) % playerCount;
+        if (this.finishedPlayers.includes(pId) || p.isBurned) {
             continue;
         }
 
-        // Nếu người này là chủ của lá bài trên bàn, reset vòng
         if (this.lastMove && pId === this.lastMove.playerId) {
             this.resetRound(pId);
             return;
         }
 
-        // Xử lý lượt chơi thông thường
         if (!this.passedPlayers.has(pId)) {
             this.currentTurn = nextIdx;
             this.specialTurnFor = null;
             return;
         }
 
-        // Xử lý lượt đặc biệt cho người đã pass
         if (this.passedPlayers.has(pId) && this.isHeoChainActive && this.lastMove) {
             const fourPairsHands = findFourConsecutivePairsInHand(p.hand);
             const strongestFourPairs = fourPairsHands.sort((a, b) => getCardWeight(b[b.length-1]) - getCardWeight(a[a.length-1]))[0];
@@ -259,8 +301,6 @@ export class GameInstance {
                 return;
             }
         }
-        
-        nextIdx = (nextIdx + 1) % playerCount;
     }
   }
 
@@ -274,16 +314,19 @@ export class GameInstance {
     let leadIdx = this.players.findIndex(p => p.id === winnerId);
     
     if (this.finishedPlayers.includes(winnerId) || this.players[leadIdx].isBurned) {
-      const playerCount = this.players.length;
-      let nextIdx = (leadIdx + 1) % playerCount;
-      for (let i = 0; i < playerCount; i++) {
-        if (!this.finishedPlayers.includes(this.players[nextIdx].id) && !this.players[nextIdx].isBurned) {
+      const originalLeadIdx = leadIdx;
+      let nextIdx = (originalLeadIdx + 1) % this.players.length;
+      
+      while(nextIdx !== originalLeadIdx) {
+        const p = this.players[nextIdx];
+        if (!this.finishedPlayers.includes(p.id) && !p.isBurned) {
           leadIdx = nextIdx;
-          break;
+          break; 
         }
-        nextIdx = (nextIdx + 1) % playerCount;
+        nextIdx = (nextIdx + 1) % this.players.length;
       }
     }
+    
     this.currentTurn = leadIdx;
   }
 
@@ -294,14 +337,15 @@ export class GameInstance {
 
     if (player.finishedRank === 1) {
       const otherPlayers = this.players.filter(p => p.id !== player.id);
-      const burnedPlayers = otherPlayers.filter(p => !p.hasPlayedAnyCard);
       otherPlayers.forEach(p => { if (!p.hasPlayedAnyCard) p.isBurned = true; });
 
-      if (this.players.length >= 3 && burnedPlayers.length === otherPlayers.length) {
+      if (this.players.length >= 3 && otherPlayers.every(p => p.isBurned)) {
         this.roundEvents.push({ type: 'CONG_CA_BAN', description: `Cóng cả bàn, tất cả các vị đều là phế vật`, timestamp: Date.now() });
       } else {
-        burnedPlayers.forEach(p => {
-          this.roundEvents.push({ type: 'CONG', playerName: p.name, description: `${p.name} bị Cóng!`, timestamp: Date.now() });
+        otherPlayers.forEach(p => {
+          if (p.isBurned) {
+            this.roundEvents.push({ type: 'CONG', playerName: p.name, description: `${p.name} bị Cóng!`, timestamp: Date.now() });
+          }
         });
       }
     }
@@ -320,15 +364,17 @@ export class GameInstance {
     this.gamePhase = "finished";
     this.isFirstGame = false;
     this.lastWasInstantWin = false;
-    this.startingPlayerId = this.finishedPlayers[0];
+    this.startingPlayerId = this.finishedPlayers.length > 0 ? this.finishedPlayers[0] : (this.players.find(p => !p.isBurned)?.id || null);
     this.isHeoChainActive = false;
     this.specialTurnFor = null;
 
     const remaining = this.players.filter(p => !this.finishedPlayers.includes(p.id));
     remaining.sort((a, b) => (a.isBurned ? 1 : 0) - (b.isBurned ? 1 : 0));
     remaining.forEach(p => {
-      this.finishedPlayers.push(p.id);
-      p.finishedRank = this.finishedPlayers.length;
+      if(!this.finishedPlayers.includes(p.id)) {
+        this.finishedPlayers.push(p.id);
+        p.finishedRank = this.finishedPlayers.length;
+      }
     });
 
     const settlements = MoneyEngine.settleGame(this.players, this.bet);
@@ -348,7 +394,7 @@ export class GameInstance {
     const playersHistory: PlayerHistoryEntry[] = this.players.map(p => {
       const pPayouts = this.lastPayouts.filter(pay => pay.playerId === p.id);
       const total = pPayouts.reduce((s, pay) => s + pay.change, 0);
-      return { id: p.id, name: p.name, rank: p.finishedRank || 0, balanceBefore: p.balance - total, balanceAfter: p.balance, change: total, isBurned: p.isBurned, transactions: pPayouts.map(pay => ({ reason: pay.reason || "Ván đấu", amount: pay.change, type: pay.change >= 0 ? "WIN" : "LOSE" })) };
+      return { id: p.id, name: p.name, rank: p.finishedRank || this.players.length, balanceBefore: p.balance - total, balanceAfter: p.balance, change: total, isBurned: p.isBurned, transactions: pPayouts.map(pay => ({ reason: pay.reason || "Ván đấu", amount: pay.change, type: pay.change >= 0 ? "WIN" : "LOSE" })) };
     });
     this.history.unshift({ roundId: Math.random().toString(36).substr(2, 5).toUpperCase(), timestamp: Date.now(), bet: this.bet, players: playersHistory, events: [...this.roundEvents] });
     if (this.history.length > 50) this.history = this.history.slice(0, 50);

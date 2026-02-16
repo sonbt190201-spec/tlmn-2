@@ -1,5 +1,5 @@
 
-import { Player, PayoutResult } from './types.js';
+import { Player, PayoutResult, Move, HandType } from './types.js';
 
 export interface ThoiResult {
   totalLoss: number;
@@ -7,6 +7,35 @@ export interface ThoiResult {
 }
 
 export class MoneyEngine {
+  /**
+   * TÍNH TIỀN PHẠT CHẶT BÀI
+   */
+  static calculateChopPenalty(victimMove: Move, attackerHandType: HandType, bet: number, isOverChop: boolean): number {
+    let penalty = 0;
+    const overChopMultiplier = isOverChop ? 2 : 1;
+
+    // 1. Heo bị chặt
+    if (victimMove.cards.some(c => c.rank === 15)) {
+        const isDoublePig = victimMove.type === HandType.PAIR;
+        if (attackerHandType === HandType.THREE_CONSECUTIVE_PAIRS) {
+            penalty = isDoublePig ? 0 : bet * 1; // 3 đôi thông không chặt được đôi heo
+        } else if (attackerHandType === HandType.FOUR_OF_A_KIND) {
+            penalty = bet * (isDoublePig ? 4 : 2);
+        } else if (attackerHandType === HandType.FOUR_CONSECUTIVE_PAIRS) {
+            penalty = bet * (isDoublePig ? 6 : 3);
+        }
+    }
+    // 2. Hàng bị chặt
+    else if (victimMove.type === HandType.THREE_CONSECUTIVE_PAIRS) {
+        if (attackerHandType === HandType.FOUR_OF_A_KIND) penalty = bet * 3;
+        else if (attackerHandType === HandType.FOUR_CONSECUTIVE_PAIRS) penalty = bet * 4;
+    } else if (victimMove.type === HandType.FOUR_OF_A_KIND) {
+        if (attackerHandType === HandType.FOUR_CONSECUTIVE_PAIRS) penalty = bet * 5;
+    }
+    
+    return penalty * overChopMultiplier;
+  }
+
   /**
    * TÍNH TIỀN THỐI (Độc lập)
    * Heo đen: 0.5, Heo đỏ: 1, 3 đôi thông: 1, Tứ quý: 4
@@ -84,7 +113,7 @@ export class MoneyEngine {
   private static settleTable2(p1: Player, p2: Player, bet: number, results: PayoutResult[]) {
     const isBurned = p2.isBurned;
     const multiplier = isBurned ? 2 : 1;
-    const reasonBet = isBurned ? "Bị Cóng (-2 cược)" : "Bét (-1 cược)";
+    const reasonBet = isBurned ? "Bị Cóng (-2 cược)" : "Nhì (-1 cược)";
     const reasonWin = isBurned ? "Thắng Cóng (+2 cược)" : "Nhất (+1 cược)";
 
     results.push({ playerId: p1.id, change: bet * multiplier, reason: reasonWin });
