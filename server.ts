@@ -277,7 +277,7 @@ wss.on('connection', (ws) => {
             broadcastGameState(room);
           }
           break;
-
+        
         case 'SEND_CHAT':
            if (room) {
              broadcast(room, {

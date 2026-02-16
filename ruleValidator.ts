@@ -144,3 +144,38 @@ export const checkInstantWin = (hand: Card[], isFirstGame: boolean): string | nu
 
   return null;
 };
+
+export function findFourConsecutivePairsInHand(hand: Card[]): Card[][] {
+    const results: Card[][] = [];
+    const rankCounts: Record<number, Card[]> = {};
+    hand.forEach(c => {
+        if (!rankCounts[c.rank]) rankCounts[c.rank] = [];
+        rankCounts[c.rank].push(c);
+    });
+
+    const pairRanks = Object.keys(rankCounts)
+        .map(Number)
+        .filter(rank => rankCounts[rank].length >= 2 && rank < 15) // '2' không được nằm trong đôi thông
+        .sort((a, b) => a - b);
+
+    if (pairRanks.length < 4) return [];
+
+    for (let i = 0; i <= pairRanks.length - 4; i++) {
+        const potentialStraight = pairRanks.slice(i, i + 4);
+        let isCons = true;
+        for (let j = 0; j < potentialStraight.length - 1; j++) {
+            if (potentialStraight[j+1] !== potentialStraight[j] + 1) {
+                isCons = false;
+                break;
+            }
+        }
+        if (isCons) {
+            const fourPairs: Card[] = [];
+            potentialStraight.forEach(rank => {
+                fourPairs.push(...rankCounts[rank].slice(0, 2)); // Lấy 2 lá đầu tiên của mỗi rank
+            });
+            results.push(fourPairs);
+        }
+    }
+    return results;
+}

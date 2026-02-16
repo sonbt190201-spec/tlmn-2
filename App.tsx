@@ -485,6 +485,12 @@ const App: React.FC = () => {
     playSfx('play');
     ws?.send(JSON.stringify({ type: 'PLAY_CARDS', payload: { cardIds: selectedCards } }));
   };
+  
+  const handlePassTurn = async () => {
+    await unlockAudio();
+    playSfx('pass');
+    ws?.send(JSON.stringify({ type: 'PASS_TURN' }));
+  };
 
   // SỬA LỖI QUAN TRỌNG: Xóa bài đã chọn khi lượt chơi thay đổi hoặc reset vòng (lastMove là null)
   useEffect(() => {
@@ -547,6 +553,7 @@ const App: React.FC = () => {
   const isMyTurn = gameState?.players && gameState.players[gameState.currentTurn]?.id === myId;
   const lastMove = gameState?.lastMove;
   const currentEffect = specialEventQueue[0] || null;
+  const isSpecialTurn = gameState?.specialTurn?.playerId === myId;
 
   return (
     <div className="h-screen h-[100dvh] bg-slate-950 relative overflow-hidden flex flex-col font-sans select-none">
@@ -596,9 +603,9 @@ const App: React.FC = () => {
         )}
       </AnimatePresence>
       <div className="bg-slate-900/80 backdrop-blur-xl border-t border-white/10 pt-2 pb-safe px-2 md:px-4 z-[100] relative">
-          {isMyTurn && gameState?.gamePhase === 'playing' && (
+          {(isMyTurn) && gameState?.gamePhase === 'playing' && (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="absolute -top-10 left-1/2 -translate-x-1/2 bg-emerald-500 text-white text-[10px] font-black px-4 py-1 rounded-full shadow-2xl z-[150] tracking-widest uppercase border border-emerald-400/50">
-              Lượt của bạn
+              {isSpecialTurn ? 'LƯỢT ĐẶC BIỆT: CHẶT HEO!' : 'Lượt của bạn'}
             </motion.div>
           )}
           <div className="max-w-full mx-auto flex -space-x-1 md:-space-x-2 justify-center overflow-x-auto scrollbar-hide py-3 px-10">
@@ -612,11 +619,18 @@ const App: React.FC = () => {
              <button onClick={toggleMic} className={`w-12 h-12 rounded-full flex items-center justify-center shadow-lg transition-all active:scale-90 ${isMicOn ? 'bg-red-500' : 'bg-slate-700'} pointer-events-auto z-[200]`}>
                 {isMicOn ? '🎤' : '🔇'}
              </button>
-             {gameState?.gamePhase === 'playing' && (
-               <div className="flex-1 flex gap-2 pointer-events-auto">
-                 <button onClick={async () => { await unlockAudio(); playSfx('pass'); ws?.send(JSON.stringify({ type: 'PASS_TURN' })); }} disabled={!isMyTurn || !lastMove} className="flex-1 py-3 bg-slate-800 rounded-xl font-black text-[10px] uppercase tracking-widest disabled:opacity-20 border border-white/5">Bỏ lượt</button>
-                 <button onClick={handlePlayCards} disabled={!isMyTurn || selectedCards.length === 0} className="flex-1 py-3 bg-emerald-600 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg disabled:opacity-20 border border-emerald-400">Đánh bài</button>
-               </div>
+             {isSpecialTurn ? (
+                <div className="flex-1 flex gap-2 pointer-events-auto">
+                  <button onClick={handlePassTurn} className="flex-1 py-3 bg-slate-800 rounded-xl font-black text-[10px] uppercase tracking-widest border border-white/5">Bỏ Qua</button>
+                  <button onClick={handlePlayCards} disabled={selectedCards.length === 0} className="flex-1 py-3 bg-red-600 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg disabled:opacity-20 border border-red-400">Chặt 4 Đôi Thông</button>
+                </div>
+             ) : (
+                gameState?.gamePhase === 'playing' && (
+                  <div className="flex-1 flex gap-2 pointer-events-auto">
+                    <button onClick={handlePassTurn} disabled={!isMyTurn || !lastMove} className="flex-1 py-3 bg-slate-800 rounded-xl font-black text-[10px] uppercase tracking-widest disabled:opacity-20 border border-white/5">Bỏ lượt</button>
+                    <button onClick={handlePlayCards} disabled={!isMyTurn || selectedCards.length === 0} className="flex-1 py-3 bg-emerald-600 rounded-xl font-black text-[10px] uppercase tracking-widest shadow-lg disabled:opacity-20 border border-emerald-400">Đánh bài</button>
+                  </div>
+                )
              )}
           </div>
       </div>
